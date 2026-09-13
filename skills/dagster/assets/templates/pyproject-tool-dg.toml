@@ -1,0 +1,15 @@
+# [tool.dg] tables for a Dagster project's pyproject.toml (what `create-dagster project` generates).
+# Source: https://docs.dagster.io/api/clis/dg-cli/dg-cli-configuration  ·  validate with: dg check toml
+[tool.dg]
+directory_type = "project"                          # required: marks this directory as a dg project
+
+[tool.dg.project]
+root_module = "my_project"                          # required: importable package under src/
+defs_module = "my_project.defs"                     # where `dg scaffold defs` writes; default <root_module>.defs
+code_location_target_module = "my_project.definitions"  # module holding the @dg.definitions entry point
+code_location_name = "my-project"                   # name shown in the UI; default = project name
+registry_modules = ["my_project.components.*"]      # modules scanned for custom Component classes (create-dagster default)
+
+[tool.dg.cli]                                       # application-level settings; disallowed if inside a workspace
+# verbose = false
+# suppress_warnings = ["project_and_activated_venv_mismatch"]

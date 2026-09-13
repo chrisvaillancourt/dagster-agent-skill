@@ -1,0 +1,12 @@
+{
+  "name": "dagster-expert",
+  "description": "Comprehensive Dagster skill: build, test, automate, operate and deploy asset-based data pipelines with the dg CLI, components, declarative automation, Pipes, Dagster+ and 60+ integrations. Grounded in the official docs with an on-demand docs fetcher.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Chris Vaillancourt",
+    "url": "https://github.com/chrisvaillancourt/dagster-expert"
+  },
+  "homepage": "https://github.com/chrisvaillancourt/dagster-expert",
+  "repository": "https://github.com/chrisvaillancourt/dagster-expert",
+  "keywords": ["dagster", "data-pipelines", "orchestration", "assets", "dg-cli", "components", "dbt", "dagster-plus"]
+}

@@ -1,0 +1,11 @@
+schema_version: "1.1"
+name: dbt-component
+description: Integrate a dbt project into a dg project the recommended way and schedule the models.
+tags: [integration, dbt, components]
+runs: 1
+expected_outcome: Uses DbtProjectComponent via dg scaffold defs (or a correct @dbt_assets fallback), daily 5am automation, verified with dg check yaml/defs.
+execution:
+  max_turns: 60
+  timeout_seconds: 1800
+context:
+  scaffold_script: scaffold.sh

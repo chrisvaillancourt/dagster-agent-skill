@@ -1,0 +1,18 @@
+# OSS CI for a Dagster project: lock check, definition load, tests. Dagster+ users: generate CI with
+# `dg plus deploy configure serverless|hybrid --git-provider github` instead.
+name: dagster-ci
+on: { pull_request: {}, push: { branches: [main] } }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - name: Validate component YAML
+        run: uv run dg check yaml
+      - name: Load all definitions
+        run: uv run dg check defs
+        env: { DAGSTER_IS_DEFS_VALIDATION_CLI: "1" }   # also set automatically by dg check defs
+      - name: Unit tests
+        run: uv run pytest tests -q

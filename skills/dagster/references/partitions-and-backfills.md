@@ -314,7 +314,7 @@ def partitioned_op_job():
     process_data_for_date()
 ```
 
-Available decorators: `dg.daily_partitioned_config`, `dg.hourly_partitioned_config`, `dg.weekly_partitioned_config`, `dg.monthly_partitioned_config` (all accepting `start_date` plus `minute_offset` / `hour_offset` / `day_offset`), `dg.static_partitioned_config(partition_keys=[...])`, and `dg.dynamic_partitioned_config(partition_fn=...)`. Time-based decorated functions receive `(start, end)` datetimes; static and dynamic ones receive a single `partition_key` string. A `PartitionedConfig` can also be passed to `dg.define_asset_job(config=...)`.
+Available decorators: `dg.daily_partitioned_config`, `dg.hourly_partitioned_config`, `dg.weekly_partitioned_config`, `dg.monthly_partitioned_config` (all accepting `start_date`, plus the offsets their cadence allows: `minute_offset` for hourly, `minute_offset` / `hour_offset` for daily, and all three including `day_offset` for weekly and monthly), `dg.static_partitioned_config(partition_keys=[...])`, and `dg.dynamic_partitioned_config(partition_fn=...)`. Time-based decorated functions receive `(start, end)` datetimes; static and dynamic ones receive a single `partition_key` string. A `PartitionedConfig` can also be passed to `dg.define_asset_job(config=...)`.
 
 Testing, all runnable under `pytest`:
 
@@ -384,7 +384,7 @@ Details and customization are in `declarative-automation.md`.
 - **One partitions definition per execution step.** Mismatched definitions across assets materialized in one run, common in components and multi-assets, is an error.
 - **`delete_dynamic_partition` is singular.** Adding takes a sequence (`add_dynamic_partitions(name, keys)`), deleting takes one key.
 - **Deleting data does not delete partitions.** Pair deletion with a sync sensor or the partition view drifts from storage.
-- **Static sets beat dynamic ones when the keys are known.** `static_partitioned_config` loads partition views faster in the UI than the dynamic equivalent.
+- **Static sets beat dynamic ones when the keys are known.** `static_partitioned_config` loads partition views faster in the UI than the dynamic equivalent (unverified).
 
 ## Legacy and superseded patterns
 

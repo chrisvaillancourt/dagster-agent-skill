@@ -1,0 +1,8 @@
+# eval run artifacts (reports, transcripts, temp scaffolds)
+evals/results/
+# python
+__pycache__/
+*.pyc
+.venv/
+# macOS
+.DS_Store
