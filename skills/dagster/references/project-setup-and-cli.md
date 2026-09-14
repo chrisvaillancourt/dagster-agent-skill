@@ -74,10 +74,10 @@ from dagster import definitions, load_from_defs_folder
 
 @definitions
 def defs():
-    return load_from_defs_folder(project_root=Path(__file__).parent.parent.parent)
+    return load_from_defs_folder(path_within_project=Path(__file__).parent)
 ```
 
-`project_root` points at the directory containing the project config file (`pyproject.toml` with `[tool.dg]`, or `dg.toml`) — three levels up from `src/<pkg>/definitions.py`. The API reference names this parameter `path_within_project` and describes it as "a path within the dg project directory"; docs examples use both spellings, so match whatever the scaffold emitted rather than renaming it.
+`path_within_project` is any path inside the project; Dagster walks upward from it to the directory holding the project config (`pyproject.toml` with `[tool.dg]`, or `dg.toml`), so `Path(__file__).parent` is what `create-dagster` emits. The older `project_root=` keyword still works but emits `DeprecationWarning: Parameter project_root ... is deprecated and will be removed in 2.0`; replace it when you touch a file that uses it.
 
 `@dg.definitions` marks a zero-argument function that returns a `Definitions`. Dagster calls it at load time.
 
@@ -90,7 +90,7 @@ Use when adding anything new: put the file under `defs/` and it is picked up. No
 | What is found | How it is loaded |
 | --- | --- |
 | `.py` files containing Dagster definitions | Module-scoped `@dg.asset`, `@dg.asset_check`, `@dg.schedule`, `@dg.sensor`, `@dg.job`, `@dg.multi_asset` objects |
-| A function decorated with `@dg.definitions` returning `dg.Definitions` | The returned `Definitions` is merged in (this is how resources are registered) |
+| A function decorated with `@dg.definitions` returning `dg.Definitions`, or a module-level `Definitions` object | Only the returned `Definitions` is loaded from that module; module-scope decorated objects in the same file are skipped without a warning. Put `@dg.definitions` functions (resources, hand-built objects) in their own module. |
 | Subdirectories with a `defs.yaml` | A component instance, resolved from its `type:` and `attributes:` |
 | Nested subdirectories | Recursed into, arbitrarily deep |
 

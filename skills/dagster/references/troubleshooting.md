@@ -75,7 +75,7 @@ DG_PROJECT_PYTHON_EXECUTABLE=../.venvs/my-project/bin/python
 
 ### `DagsterInvariantViolationError` constructing `Definitions`
 
-**Causes** `load_from_defs_folder(project_root=...)` given the `defs/` folder instead of the project root (the directory holding `pyproject.toml`); `definitions.py` exporting something other than a `Definitions`; two `Definitions` exported instead of merged.
+**Causes** `load_from_defs_folder(path_within_project=...)` given a path outside the project (it must sit under the directory holding `pyproject.toml`); the deprecated `project_root=` keyword (still accepted, warns); `definitions.py` exporting something other than a `Definitions`; two `Definitions` exported instead of merged.
 
 **Fix**
 
@@ -88,7 +88,7 @@ from my_project.assets import my_asset
 
 defs = dg.Definitions.merge(
     dg.Definitions(assets=[my_asset]),
-    dg.load_from_defs_folder(project_root=Path(__file__).parent.parent),
+    dg.load_from_defs_folder(path_within_project=Path(__file__).parent),
 )
 ```
 

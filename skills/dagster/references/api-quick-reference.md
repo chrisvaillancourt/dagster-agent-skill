@@ -37,7 +37,7 @@ All symbols are importable from the top-level `dagster` package unless a differe
 | `dg.Definitions.map_asset_specs` | `(func, selection=None)` (preview) | Rewrite specs in place across the object. |
 | `dg.Definitions.load_asset_value` | `(asset_key, python_type, partition_key, metadata)` | Read an asset through its IO manager; `.get_asset_value_loader()` for several. |
 | `@dg.definitions` | `def defs() -> Definitions` or `def defs(context: ComponentLoadContext)` | Lazy entry point; preferred over a module-level `Definitions(...)`. |
-| `dg.load_from_defs_folder` | `(path_within_project=)` — snippets also pass `project_root=` | Autoload a `defs/` tree in a `dg` project. Primary loader for the modern layout. |
+| `dg.load_from_defs_folder` | `(path_within_project=)`; `project_root=` is deprecated (warns, removed in 2.0) | Autoload a `defs/` tree in a `dg` project. Primary loader for the modern layout. |
 | `dg.load_definitions_from_module` | `(module, resources, loggers, executor)` (preview) | Build `Definitions` from one module; `_modules`, `_package_module`, `_package_name`, `_current_module` variants. |
 | `dg.load_assets_from_modules` | `(modules, group_name, key_prefix, ...)` | Collect `@asset` objects from modules; `_current_module` / `_package_module` / `_package_name` variants. |
 | `dg.load_asset_checks_from_modules` | `(modules, asset_key_prefix)` | Same for `@asset_check` objects. |

@@ -23,6 +23,7 @@ skills/dagster/
 │   └── find_legacy_patterns.py  # flag superseded APIs with their modern replacement
 └── assets/templates/            # pyproject [tool.dg], dagster.yaml, Dockerfile, CI, resources, tests
 evals/                           # `claude plugin eval` suite (with/without-skill comparison)
+tools/                           # maintainer checks: validate_skill.py (spec + structure), check_symbols.py (API names vs docs corpus)
 ```
 
 ## Install
@@ -59,8 +60,14 @@ Dagster Labs publishes an official skill (`dagster-expert` inside the `dagster` 
 claude plugin eval . --model claude-opus-5 --allow-tools Bash Write Edit --scaffold -j 4
 ```
 
-See `evals/README.md` for the case list and grading rubric.
+See `evals/README.md` for the case list, grading rubric, and the recorded results of the last with/without-skill run.
 
 ## Updating
 
-The reference files were distilled from the docs at Dagster 1.13.x. To refresh: re-run the author process described in `evals/README.md`, or fetch individual pages with `scripts/dagster_docs.py <path>` and update the affected reference.
+The reference files were distilled from the docs at Dagster 1.13.x. To refresh: re-run the author process described in `evals/README.md`, or fetch individual pages with `scripts/dagster_docs.py <path>` and update the affected reference. Before committing, run:
+
+```bash
+uv run python tools/validate_skill.py skills/dagster            # frontmatter, line caps, links, TOCs, residue
+curl -sL https://docs.dagster.io/llms-full.txt -o /tmp/llms-full.txt
+uv run python tools/check_symbols.py /tmp/llms-full.txt <dagster-repo>/docs/docs skills/dagster/references
+```

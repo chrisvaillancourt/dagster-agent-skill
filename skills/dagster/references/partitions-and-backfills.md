@@ -40,7 +40,7 @@ Attach with `@dg.asset(partitions_def=...)`, `dg.AssetSpec(..., partitions_def=.
 | --- | --- | --- |
 | `dg.HourlyPartitionsDefinition` | `2024-05-20-14:00` | `start_date`, `end_date`, `minute_offset`, `fmt`, `timezone`, `end_offset`, `exclusions` |
 | `dg.DailyPartitionsDefinition` | `2024-05-20` | `start_date`, `end_date`, `minute_offset`, `hour_offset`, `fmt`, `timezone`, `end_offset`, `exclusions` |
-| `dg.WeeklyPartitionsDefinition` | week start date | adds `day_offset` (0 = Sunday) |
+| `dg.WeeklyPartitionsDefinition` | week start date (Sunday by default) | adds `day_offset` (0 = Sunday … 6 = Saturday). The first key is the first week boundary on or after `start_date`, and earlier days belong to no partition: a Wednesday `start_date` with the default offset leaves four uncovered days unless you set `day_offset=3` |
 | `dg.MonthlyPartitionsDefinition` | month start date | adds `day_offset` (day of month, default 1) |
 | `dg.TimeWindowPartitionsDefinition` | per `fmt` | `cron_schedule`, `start`, `end`, `fmt`, `timezone`, `end_offset`, `exclusions` |
 | `dg.StaticPartitionsDefinition` | your strings | a list of partition keys |
@@ -196,6 +196,8 @@ def events(context: dg.AssetExecutionContext) -> None:
     start, end = context.partition_time_window
     overwrite_data_in_datetime_range(start, end, compute(read(start, end)))
 ```
+
+The body writes its own output and returns `None` on purpose: a single-run backfill covers a partition range, so `context.partition_key` raises and the default I/O manager cannot persist one returned value for the range. Return `dg.MaterializeResult(metadata=...)` if you want per-run metadata. Prove the policy locally with `dg launch --assets events --partition-range 2024-05-01...2024-05-07`, which should log one step and seven materializations.
 
 `dg.BackfillPolicy.multi_run(max_partitions_per_run=10)` batches instead: 100 partitions become 10 runs of 10. Choosing between them:
 
@@ -377,7 +379,8 @@ Details and customization are in `declarative-automation.md`.
 ## Gotchas
 
 - **Key format is the contract.** Daily keys are `2024-05-20`, hourly keys are `2024-05-20-14:00`, multi keys are `2024-05-20|us` with dimensions ordered by name. A `RunRequest(partition_key=...)` that does not match an existing key fails at launch.
-- **`context.partition_key` raises under a range-covering run.** Any asset carrying `BackfillPolicy.single_run()` or `multi_run()` must read `partition_time_window`, `partition_key_range`, or `partition_keys`.
+- **`context.partition_key` raises under a range-covering run.** Any asset carrying `BackfillPolicy.single_run()` or `multi_run()` must read `partition_time_window`, `partition_key_range`, or `partition_keys`. Returning a plain value also fails at handle-output time, because the default filesystem I/O manager refuses to store one object for a range of partitions: write the data yourself and return `None` or `dg.MaterializeResult(metadata=...)`.
+- **Read upstream partitions through the mapping.** In a downstream body use `context.asset_partition_keys_for_input(name)`, `asset_partition_key_range_for_input`, or `asset_partitions_time_window_for_input`. Recomputing the upstream keys by hand from the partitions definition silently ignores any `start_offset` / `end_offset` on the declared `partition_mapping`.
 - **`end_offset=0` excludes the current period.** If the schedule appears to be a day behind, that is the time-window semantics, not a bug. Set `end_offset=1` to include the in-progress period, accepting partial data.
 - **Non-UTC timezones need a timezone offset in `fmt`.** For hourly or faster cadences, a format without an offset makes the two instances of the repeated hour at the fall DST transition ambiguous; the second one gets a UTC offset appended automatically.
 - **Cap partitions at 100,000 per asset.** Beyond that the UI loads slowly. Coarsen the cadence or split the asset.

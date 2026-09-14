@@ -98,7 +98,7 @@ recommended.
 | `dagster dev -f/-m` | `dg dev` | `dg` locates the project via TOML config, not a file path. |
 | `workspace.yaml` | `dg.toml` with `directory_type = "workspace"` and `[[workspace.projects]]` | `workspace.yaml` still loads; docs recommend migrating. Both found in cwd, or via `-w`. |
 | `@repository` | `Definitions`, or `@dg.definitions` | One workspace may mix both during migration. |
-| Manual `Definitions(assets=[...])` listing | `dg.load_from_defs_folder(project_root=...)` | Autoloads everything under `<root_module>/defs`. |
+| Manual `Definitions(assets=[...])` listing | `dg.load_from_defs_folder(path_within_project=Path(__file__).parent)` | Autoloads everything under `<root_module>/defs`. |
 | `dagit` package and executable | `dagster-webserver` | Deprecated in 1.4, drop-in. Helm `dagit:` / `ingress.dagit` became `dagsterWebserver:` / `ingress.dagsterWebserver`. |
 | `dagster-cloud` CLI | `dg plus` and `dg api` | Superseded. |
 
@@ -177,11 +177,14 @@ Use when handed a repo that predates `dg`. Order matters: get `dg` recognizing t
    [tool.dg.project]
    root_module = "my_existing_project"
    code_location_target_module = "my_existing_project.definitions"
+   code_location_name = "my_existing_project"   # the name workspace.yaml / [tool.dagster] gave the location
    ```
 
-   `directory_type` and `root_module` are required. `code_location_target_module` defaults to
-   `<root_module>.definitions`; set it only if the `Definitions` object lives elsewhere.
-5. `dg list defs` must now print your existing assets. If it does not, the config is wrong.
+   `directory_type` and `root_module` are required. `code_location_target_module` defaults to `<root_module>.definitions`; set it only if the `Definitions` object lives elsewhere.
+   Pin `code_location_name` to the existing name: schedule and sensor on/off state and run history are keyed by it, and `dagster definitions validate` warns when the name changes.
+5. `dg list defs` must now print your existing assets. If it does not, the config is wrong. Save this baseline before touching any code (`dg list defs --json > /tmp/before.json`) and diff it against the same command at the end: keys, deps, groups, automation labels, jobs and schedule crons must match exactly.
+   Default statuses are not in that output, so also record `defs.resolve_schedule_def("all_job_schedule").default_status` and `defs.resolve_sensor_def("default_automation_condition_sensor").default_status` (that sensor exists whenever any asset has an `automation_condition`).
+   Keep derived names intact: a `ScheduleDefinition` without `name=` is called `<job_name>_schedule`, and renaming it resets its on/off state.
 6. `mkdir my_existing_project/components && touch my_existing_project/components/__init__.py`.
 7. Declare the entry point so `dg` sees custom component types. With `setup.py`, put this in a new
    `setup.cfg` instead; `setup.py` cannot be read reliably.
@@ -205,21 +208,20 @@ Use when handed a repo that predates `dg`. Order matters: get `dg` recognizing t
 
    defs = dg.Definitions.merge(
        dg.Definitions(assets=[my_asset]),
-       dg.load_from_defs_folder(project_root=Path(__file__).parent.parent),
+       dg.load_from_defs_folder(path_within_project=Path(__file__).parent),
    )
    ```
 10. Move one legacy module at a time: `mv my_existing_project/elt/* my_existing_project/defs/elt`,
     then drop that module's imports and entries from the explicit `Definitions(...)` call. Re-run
     `dg list defs` after each move.
 11. Repeat until `definitions.py` is one line:
-    `defs = dg.load_from_defs_folder(project_root=Path(__file__).parent.parent)`.
+    `defs = dg.load_from_defs_folder(path_within_project=Path(__file__).parent)`.
 12. Delete `workspace.yaml`, add a workspace `dg.toml` (`directory_type = "workspace"` plus a
     `[[workspace.projects]]` entry per project), then run `dg dev`.
 13. Work through the [old to new map](#old-to-new-api-map) for the symbols the greps found, and
     convert modules to components where one exists (see `components.md`).
 
-Escape hatch: to use a single component without restructuring, keep your `Definitions` and merge in
-`dg.build_defs_for_component(component=SomeComponent(...))`. No `defs/` folder, no entry point.
+Escape hatch: to use a single component without restructuring, keep your `Definitions` and merge in `dg.build_defs_for_component(component=SomeComponent(...))`. No `defs/` folder, no entry point.
 
 ## Sensors to Declarative Automation
 

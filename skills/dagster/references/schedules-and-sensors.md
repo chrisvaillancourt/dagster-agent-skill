@@ -80,7 +80,7 @@ daily_schedule = dg.ScheduleDefinition(
 )
 ```
 
-`target=` accepts anything coercible to an `AssetSelection` (`"*"`, a selection string, a sequence of strings, `AssetKey`, `AssetsDefinition`), plus a `JobDefinition` or the `UnresolvedAssetJobDefinition` returned by `define_asset_job`. It replaces the older `job=` and `job_name=` parameters. `ScheduleDefinition` also takes `run_config=` / `run_config_fn=`, `tags_fn=`, `should_execute=`, `description=`, `metadata=`, and `required_resource_keys=`. Only one of `run_config`, `run_config_fn`, or `execution_fn` may be set; likewise only one of `tags`, `tags_fn`, or `execution_fn`.
+`target=` accepts anything coercible to an `AssetSelection` (`"*"`, a selection string, a sequence of strings, `AssetKey`, `AssetsDefinition`), plus a `JobDefinition` or the `UnresolvedAssetJobDefinition` returned by `define_asset_job`. It replaces the older `job=` and `job_name=` parameters. An asset `target=` runs an anonymous job named `__anonymous_asset_job_<schedule_name>`, which is not listed as a job by `dg list defs` or the Jobs page and cannot be launched by name; use `define_asset_job` when the job itself must be visible, launchable, or configurable. `dg list defs` shows a schedule's cron but not its `execution_timezone`; confirm the timezone in Python or the UI. `ScheduleDefinition` also takes `run_config=` / `run_config_fn=`, `tags_fn=`, `should_execute=`, `description=`, `metadata=`, and `required_resource_keys=`. Only one of `run_config`, `run_config_fn`, or `execution_fn` may be set; likewise only one of `tags`, `tags_fn`, or `execution_fn`.
 
 Decorator form — use when the run request depends on evaluation time, resources, or conditional logic:
 

@@ -27,7 +27,7 @@ Expert guidance for Dagster work. `SKILL.md` is the map: rules, mental model, a 
 
 ## Mental model
 
-- A **Dagster project** is a Python package (`src/<pkg>/`) with a `definitions.py` entry point that calls `dg.load_from_defs_folder(...)`. Everything under `src/<pkg>/defs/` is **autoloaded**: decorated assets, checks, schedules, sensors, jobs; any `dg.Definitions` returned by a `@dg.definitions` function (that is how resources are bound); and `defs.yaml` **component** instances.
+- A **Dagster project** is a Python package (`src/<pkg>/`) with a `definitions.py` entry point that calls `dg.load_from_defs_folder(...)`. Everything under `src/<pkg>/defs/` is **autoloaded**: decorated assets, checks, schedules, sensors, jobs; `dg.Definitions` returned by a `@dg.definitions` function (that is how resources are bound); and `defs.yaml` **component** instances. One rule: a module contributes *either* its module-scope decorated objects *or* the `Definitions` it returns, never both, and nothing warns when the former are dropped.
 - A deployed project is a **code location**. The **webserver** serves the UI/GraphQL; the **daemon** runs schedules, sensors, the run queue, backfills and automation conditions; **run launchers/executors** run the work. `dg dev` starts all of that locally.
 - **Assets** carry keys, deps, metadata, partitions, checks and an optional `automation_condition`. **Resources** are typed clients injected by parameter name. **IO managers** move return values between assets; with `deps=` you move data yourself.
 - **Automation**: prefer `dg.AutomationCondition` (eager / on_cron / on_missing) on assets; use schedules for fixed cadence and sensors for external events.
@@ -68,8 +68,8 @@ Run after every change to definitions, in the project directory:
 uv run dg check yaml          # defs.yaml schema errors (skip if no components)
 uv run dg check defs          # loads every definition on a real instance; exit 1 on error
 uv run dg list defs           # confirm keys, groups, deps, schedules appeared as intended
-uv run dg launch --assets my_asset            # execute a selection locally (add --partition K)
-uv run pytest tests -q                        # unit tests
+uv run dg launch --assets my_asset            # execute locally (add --partition K); ephemeral instance unless DAGSTER_HOME is set
+uv run pytest tests -q                        # unit tests (uv add --dev pytest first: create-dagster ships tests/ but no runner)
 ```
 
 `scripts/check_project.sh [--launch "<selection>"] [--tests]` runs this loop and reports the first failure. Interactive check: `uv run dg dev` then open http://localhost:3000.
@@ -104,7 +104,7 @@ def orders(context: dg.AssetExecutionContext, config: OrdersConfig, warehouse: W
 
 Use a parameter named after the upstream asset instead of `deps=` when an IO manager should pass its value.
 
-**Resources bound in `defs/`** (`src/my_project/defs/resources.py`; template in `assets/templates/resources_defs.py`):
+**Resources bound in `defs/`** (`src/my_project/defs/resources.py`, a module holding nothing else; template in `assets/templates/resources_defs.py`):
 
 ```python
 @dg.definitions
@@ -136,7 +136,8 @@ def orders_have_rows(warehouse: WarehouseResource) -> dg.AssetCheckResult:
 type: dagster_dbt.DbtProjectComponent
 attributes:
   project: "{{ context.project_root }}/dbt/jdbt"   # what the scaffolder writes; `{{ project_root }}` also resolves
-  select: "fqn:*"                                   # optional; other attributes: exclude, translation, op, cli_args
+  select: "fqn:*"                                   # optional; other attributes: exclude, op, cli_args
+  translation: { group_name: jdbt }                 # so schedules/jobs can target group:jdbt (default group is "default")
 ```
 
 Discover types and schemas with `dg list components` and `dg utils inspect-component <Type>`; validate with `dg check yaml`.
@@ -153,16 +154,18 @@ def test_orders():
 ## dg CLI essentials
 
 ```bash
-uvx create-dagster@latest project my-project && cd my-project && uv sync
-uv run dg scaffold defs dagster.asset assets/orders.py        # also: dagster.multi_asset, dagster.schedule, dagster.sensor, dagster.job, dagster.resources
+uvx create-dagster@latest project my-project && cd my-project && uv sync   # `project .` names the package after the CWD
+uv run dg scaffold defs dagster.asset assets/orders.py        # path is relative to src/<pkg>/defs/ from any CWD; also: dagster.multi_asset, dagster.schedule, dagster.sensor, dagster.job, dagster.resources
 uv run dg scaffold defs dagster.asset_check checks/orders.py --asset-key orders   # asset_check requires --asset-key
 uv run dg scaffold defs <module.ComponentType> <name> [flags] # component instance (defs.yaml); --format python for component.py
 uv run dg scaffold component MyComponent                      # custom component class under src/<pkg>/components/
 uv run dg list defs [--json] [--assets '<selection>']          # what is loaded
 uv run dg list components [--package dagster_dbt]              # component types available in this env
-uv run dg check yaml | dg check defs | dg check toml
+uv run dg utils inspect-component dagster_dbt.DbtProjectComponent   # a component's defs.yaml schema and scaffold flags
+uv run dg check yaml && uv run dg check defs                   # validate YAML, then load every definition (also: dg check toml)
 uv run dg dev [-p 3000]                                        # UI + daemon locally
-uv run dg launch --assets 'group:sales' [--partition 2025-01-01] [--config-json '{...}'] | --job daily_job
+uv run dg launch --assets 'group:sales' [--partition 2025-01-01] [--config-json '{...}']
+uv run dg launch --job daily_job [-c run_config.yaml]
 uv run dg list envs                                            # EnvVars referenced by the project (.env is auto-loaded)
 ```
 
@@ -183,10 +186,12 @@ Prefer `--json` output when you consume the result programmatically. Dagster+ op
 - Using `dagster dev -m …`, `workspace.yaml` or `@repository` in a `create-dagster` project. Use `dg dev`; definitions autoload from `defs/`.
 - Reading secrets with `os.getenv` at import or hard-coding them; use `dg.EnvVar` in resource config.
 - Putting resources in `defs.yaml`. Resources are not components; return them from a `@dg.definitions` function in `defs/`.
+- Adding a `@dg.definitions` function (or a module-level `Definitions` object) to a `defs/` module that also holds decorated assets. The loader then takes only the returned `Definitions` and silently drops the module-scope assets. Keep such functions in their own module.
 - Forgetting `can_subset=True` on a `@dg.multi_asset` that users will select partially.
 - Expecting `AutomationCondition` to do anything while the automation condition sensor is off.
 - Sensors that take longer than the evaluation timeout or forget `run_key`, producing timeouts or duplicate runs.
 - Mixing partition definitions across a dependency without a `partition_mapping`.
+- Returning a plain value or reading `context.partition_key` in an asset with `BackfillPolicy.single_run()`; a range run has no single key and the default I/O manager cannot store one output for a range. Read `context.partition_keys` / `partition_time_window`, write the data yourself, return `dg.MaterializeResult`.
 - Pinning `dagster-<integration>` libraries to the core version. Core packages (`dagster`, `dagster-webserver`, `dagster-graphql`) share one 1.x version; integration libraries are released alongside on their own 0.y.z track, so install core pinned and let the resolver pick the matching library release.
 - Using concurrency pools without `run_monitoring.free_slots_after_run_end_seconds`; a cancelled run then holds its slot until someone frees it in the UI.
 - Reporting "done" without `dg check defs` passing.

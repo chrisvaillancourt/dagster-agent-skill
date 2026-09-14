@@ -44,6 +44,7 @@ attributes:
   include_metadata: [column_metadata, row_count]
   translation: { group_name: dbt_models, description: 'dbt model {{ node.name }}' }
 ```
+Set `translation.group_name` whenever a schedule, job, or `dg launch --assets 'group:...'` must select exactly the dbt models; without it they land in the `default` group alongside everything else. A `profiles.yml` sitting beside `dbt_project.yml` needs no `profiles_dir`; a successful `dg launch` build is the proof that dbt found it.
 
 | Key | Meaning |
 | --- | --- |
