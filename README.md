@@ -1,6 +1,6 @@
-# dagster-expert
+# Dagster Agent Skill
 
-A cross-harness [Agent Skill](https://agentskills.io) for building, testing, automating, operating and deploying [Dagster](https://dagster.io) data pipelines. Works in Claude Code, OpenAI Codex, Cursor, GitHub Copilot and any other tool that reads `SKILL.md`.
+An independent, cross-harness [Agent Skill](https://agentskills.io) for building, testing, automating, operating and deploying [Dagster](https://dagster.io) data pipelines. Works in Claude Code, OpenAI Codex, Cursor, GitHub Copilot and any other tool that reads `SKILL.md`.
 
 The skill is grounded in the official documentation (`https://docs.dagster.io/llms.txt` and the docs source in `dagster-io/dagster`), targets the modern toolchain (`dg` CLI, `create-dagster`, `defs/` autoloading, components, declarative automation, Pipes), and ships a docs fetcher so answers never go stale.
 
@@ -31,14 +31,14 @@ tools/                           # maintainer checks: validate_skill.py (spec + 
 **Claude Code** (plugin marketplace):
 
 ```
-/plugin marketplace add chrisvaillancourt/dagster-expert
-/plugin install dagster-expert@dagster-expert
+/plugin marketplace add chrisvaillancourt/dagster-agent-skill
+/plugin install dagster-agent-skill@dagster-agent-skill
 ```
 
 **Codex, Cursor, Copilot and 70+ other agents** (via the [`skills`](https://skills.sh) CLI; `-g` installs for all projects):
 
 ```bash
-npx skills add chrisvaillancourt/dagster-expert -g
+npx skills add chrisvaillancourt/dagster-agent-skill -g
 ```
 
 **Manual**: copy `skills/dagster/` into your tool's skills directory (`~/.claude/skills/`, `.claude/skills/`, `.agents/skills/`, `~/.codex/skills/`, …).
@@ -52,7 +52,7 @@ Invoke explicitly with `/dagster <request>` where your tool supports slash-skill
 
 ## Relationship to the official `dagster-io/skills`
 
-Dagster Labs publishes an official skill (`dagster-expert` inside the `dagster` plugin). This skill is independent: broader topical coverage (deployment, operations, Pipes, testing, migration, troubleshooting), a live docs fetcher, and verification scripts. The skill here is named `dagster` so the two can be installed side by side without a name clash.
+Dagster Labs publishes an official skill (`dagster-expert` inside the `dagster` plugin). This project is independent: broader topical coverage (deployment, operations, Pipes, testing, migration, troubleshooting), a live docs fetcher, and verification scripts. Its repository, marketplace, and plugin are named `dagster-agent-skill`; the skill itself is named `dagster`. These names distinguish it from both the official Dagster project and its agent skill.
 
 ## Evaluating
 

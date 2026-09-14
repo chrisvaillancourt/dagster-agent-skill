@@ -6,7 +6,7 @@ metadata:
   author: chrisvaillancourt
   version: "0.1.0"
   dagster-release-line: "1.13"
-  source: https://github.com/chrisvaillancourt/dagster-expert
+  source: https://github.com/chrisvaillancourt/dagster-agent-skill
   docs-index: https://docs.dagster.io/llms.txt
 ---
 

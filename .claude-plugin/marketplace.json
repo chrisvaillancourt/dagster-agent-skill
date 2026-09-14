@@ -1,5 +1,5 @@
 {
-  "name": "dagster-expert",
+  "name": "dagster-agent-skill",
   "owner": {
     "name": "Chris Vaillancourt",
     "url": "https://github.com/chrisvaillancourt"
@@ -7,7 +7,7 @@
   "description": "Cross-harness Dagster skill (Claude Code, Codex, Cursor, Copilot) grounded in the official documentation.",
   "plugins": [
     {
-      "name": "dagster-expert",
+      "name": "dagster-agent-skill",
       "source": "./",
       "description": "Comprehensive Dagster skill: build, test, automate, operate and deploy asset-based data pipelines with the dg CLI, components, declarative automation, Pipes, Dagster+ and 60+ integrations.",
       "version": "0.1.0",
