@@ -54,6 +54,7 @@ dg.Definitions(resources={"orders_db": OrdersDb(
 **Caveats:**
 - The watching location becomes a dependency of every location it covers: if it fails to load or its code server is down, nobody gets alerts. Keep it small, and alert on its own health some other way.
 - Location names are matched by equality. In-process tests don't exercise cross-location matching (a direct call skips matching; a tick evaluation sees location `None`), so verify the selectors in a real multi-location deployment.
+- `CodeLocationSelector` matches only a location whose repository is the default `__repository__`. For a legacy location built from a named `@repository`, use `dg.RepositorySelector(location_name=..., repository_name=...)`.
 - The routing resources now run in the watching location's code server, so their env vars move there (see `deployment-oss.md`).
 - `monitor_all_code_locations=True` is the alternative when every location should be covered; it can't be combined with `monitored_jobs`.
 - Detail: `schedules-and-sensors.md`.

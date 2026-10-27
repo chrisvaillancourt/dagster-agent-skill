@@ -105,7 +105,7 @@ class MyClientResource(dg.ConfigurableResource):
 | `teardown_after_execution(context)` | Once per run, per process, after execution resolves |
 | `yield_for_execution(context)` | Context manager wrapping both; override for connections that must stay open |
 
-These three names are the whole lifecycle API. Dagster never calls a method named `teardown()`, `close()` or `cleanup()`; put that code in `teardown_after_execution` or after the `yield` in `yield_for_execution`. The hooks run only for a `ConfigurableResource` bound directly in `Definitions(resources=...)` (or passed to `dg.materialize` / `dg.build_resources`). An instance returned from a legacy `dg.ResourceDefinition(resource_fn=...)` is treated as a plain value: on 1.13 neither `setup_for_execution` nor `teardown_after_execution` runs for it.
+These three names are the whole lifecycle API. Dagster never calls a method named `teardown()`, `close()` or `cleanup()`; put that code in `teardown_after_execution` or after the `yield` in `yield_for_execution`. The hooks run only for a `ConfigurableResource` bound directly in `Definitions(resources=...)`, nested inside one, or passed to `dg.materialize` / `dg.build_resources`. An instance returned from a legacy `dg.ResourceDefinition(resource_fn=...)` is treated as a plain value: on 1.13 neither `setup_for_execution` nor `teardown_after_execution` runs for it.
 
 With the multiprocess executor each process gets its own instance, so setup and teardown run once per process, not once per run. Do not assume a single initialization. For anything that must stay open for the whole run, override `yield_for_execution` instead of the two hooks:
 
