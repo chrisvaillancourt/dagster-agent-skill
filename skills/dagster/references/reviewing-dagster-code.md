@@ -24,7 +24,7 @@ grep -rnE "def (teardown|close|cleanup)\(" src/
 
 **Look for:** a settings class (pydantic `BaseSettings`, a dataclass filled from `os.environ`, or a hand-written `from_env()`) that a function builds and returns through `dg.ResourceDefinition(resource_fn=...)` or `@dg.resource`. Often the function also returns a `ConfigurableResource` it constructed itself.
 
-**Use instead:** a `dg.ConfigurableResource` whose fields are bound to `dg.EnvVar("NAME")` (`dg.EnvVar.int("NAME")` for integers) in `Definitions(resources=...)`. Dagster then masks the values in the UI, lists them under `dg list envs`, resolves them when the resource is built, and runs the resource's lifecycle hooks.
+**Use instead:** a `dg.ConfigurableResource` whose fields are bound to `dg.EnvVar("NAME")` (`dg.EnvVar.int("NAME")` for integers) in `Definitions(resources=...)`. Dagster then masks the values in the UI, resolves them when the resource is built, and runs the resource's lifecycle hooks.
 
 ```python
 class OrdersDb(dg.ConfigurableResource):
