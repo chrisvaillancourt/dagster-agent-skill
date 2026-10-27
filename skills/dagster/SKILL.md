@@ -17,7 +17,7 @@ Expert guidance for Dagster work. `SKILL.md` is the map: rules, mental model, a 
 ## Rules
 
 1. **Never answer API, CLI or YAML details from memory.** Open the reference file the router names, or run `scripts/dagster_docs.py <docs-path>` / `--api <page>`. Docs beat memory; Dagster's surface changed a lot (the `dg` CLI and components are the default now).
-2. **Modern toolchain only**, unless the user's repo is legacy and they ask to stay there: `uvx create-dagster@latest project`, `dg scaffold defs`, `dg check defs`, `dg dev`, `dg launch`. The `dagster` CLI, `workspace.yaml`, and `@repository` are superseded.
+2. **Modern toolchain only**, unless the user's repo is legacy and they ask to stay there: `uvx create-dagster@latest project`, `dg scaffold defs`, `dg check defs`, `dg dev`, `dg launch`. `dagster dev -m` and `@repository` are superseded, and a single `create-dagster` project needs no `workspace.yaml` (`dg dev` plus `defs/` autoloading). `workspace.yaml` with `grpc_server` (or `python_module`) entries is still the current wiring for OSS deployments with several code servers; see `references/deployment-oss.md`.
 3. **Assets first.** Model outputs as `@dg.asset` (or components that generate assets). Reach for `@dg.op`/`@dg.job` only for non-asset work or dynamic fan-out.
 4. **`import dagster as dg`** and the `dg.` prefix in all code, as the docs do.
 5. **Verify every change** with the loop in [Verification loop](#verification-loop); do not report success without running it. Run `scripts/check_project.sh` when in a project.
@@ -57,6 +57,7 @@ Expert guidance for Dagster work. `SKILL.md` is the map: rules, mental model, a 
 | Exact signature or symbol name | `references/api-quick-reference.md` (grep it) | `dagster_docs.py --api <page>` |
 | Old code: `@repository`, `SourceAsset`, `AutoMaterializePolicy`, step launchers, Airflow migration, upgrades | `references/migration-and-legacy.md` | `scripts/find_legacy_patterns.py` |
 | An error message or stuck run/schedule/sensor | `references/troubleshooting.md` | `scripts/check_project.sh` |
+| Review Dagster code: reimplemented built-ins (env settings in a `resource_fn`, per-location failure sensors, uncalled teardown methods) | `references/reviewing-dagster-code.md` | the grep commands in that file |
 
 Grep a reference before reading it whole when you need one fact: `grep -n "partition_mapping" references/partitions-and-backfills.md`.
 
@@ -183,7 +184,7 @@ Prefer `--json` output when you consume the result programmatically. Dagster+ op
 
 ## Common mistakes to avoid
 
-- Using `dagster dev -m …`, `workspace.yaml` or `@repository` in a `create-dagster` project. Use `dg dev`; definitions autoload from `defs/`.
+- Using `dagster dev -m …`, `workspace.yaml` or `@repository` in a single `create-dagster` project. Use `dg dev`; definitions autoload from `defs/`. Do not strip `workspace.yaml` from an OSS deployment that points the webserver and daemon at several code servers; that is its current job.
 - Reading secrets with `os.getenv` at import or hard-coding them; use `dg.EnvVar` in resource config.
 - Putting resources in `defs.yaml`. Resources are not components; return them from a `@dg.definitions` function in `defs/`.
 - Adding a `@dg.definitions` function (or a module-level `Definitions` object) to a `defs/` module that also holds decorated assets. The loader then takes only the returned `Definitions` and silently drops the module-scope assets. Keep such functions in their own module.

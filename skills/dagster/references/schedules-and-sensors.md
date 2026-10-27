@@ -270,16 +270,23 @@ def my_failure_sensor(context: dg.RunFailureSensorContext):
 
 Context surface: `context.dagster_run`, `context.dagster_event`, `context.instance`, `context.log`, `context.partition_key`, `context.sensor_name`. `RunFailureSensorContext` adds `failure_event` and `get_step_failure_events()`.
 
-Scope with `monitored_jobs=` (job definitions, or `dg.JobSelector(location_name=, repository_name=, job_name=)` / `dg.RepositorySelector` / `dg.CodeLocationSelector` for other code locations), or `monitor_all_code_locations=True` for the whole deployment. Setting both raises an error. With neither, the sensor fires for any job in its own code location. `request_job=` / `request_jobs=` name what a returned `RunRequest` should launch.
+Scope with `monitored_jobs=` (job definitions, or `dg.JobSelector(location_name=, repository_name=, job_name=)` / `dg.RepositorySelector` / `dg.CodeLocationSelector` for other code locations), or `monitor_all_code_locations=True` for the whole deployment. Setting both raises an error. With neither, the sensor fires for any job in its own code location only. `request_job=` / `request_jobs=` name what a returned `RunRequest` should launch.
+
+Once `monitored_jobs` is set, runs from the sensor's own location match only the job definitions listed in it, so a list holding only other locations' selectors stops watching the home location. List the home location's selector too. One failure sensor can then cover several locations, instead of a copy per location with duplicated routing config:
 
 ```python
-@dg.run_status_sensor(
-    monitored_jobs=[dg.CodeLocationSelector(location_name="defs")],
-    run_status=dg.DagsterRunStatus.SUCCESS,
+# lives in the "alerts" location; watches it and "analytics"
+@dg.run_failure_sensor(
+    monitored_jobs=[
+        dg.CodeLocationSelector(location_name="alerts"),
+        dg.CodeLocationSelector(location_name="analytics"),
+    ],
 )
-def code_location_a_sensor():
-    send_slack_alert()
+def failure_alerts(context: dg.RunFailureSensorContext, notifier: NotifierResource):  # your ConfigurableResource
+    notifier.send(f"{context.dagster_run.job_name} failed: {context.failure_event.message}")
 ```
+
+`location_name` is compared by equality with the deployed location's name. In-process tests can't check this scoping. Calling the sensor with `build_run_status_sensor_context(...)` skips matching entirely, so it fires whatever `monitored_jobs` contains. `sensor.evaluate_tick(build_sensor_context(instance=...))` does run the matching, but an `execute_in_process` run and the test sensor both have location `None`: the run counts as own-location, and no `CodeLocationSelector` (right name or typo) ever matches it. Check cross-location scoping in a real deployment or a multi-location `dg dev` workspace.
 
 Returning nothing is fine — Dagster reports an event back to the monitored run indicating the sensor ran. For Slack and email alerting, prefer the prebuilt `dagster_slack.make_slack_on_run_failure_sensor` and `dg.make_email_on_run_failure_sensor` (see `integrations-catalog.md`).
 
@@ -306,7 +313,7 @@ The same works for `@dg.schedule` (`context.scheduled_execution_time` plus a `Da
 ## Enabling and operating
 
 - The `dagster-daemon` process must be running: the scheduler daemon creates runs from active schedules, and the sensor daemon (always enabled) creates runs from active sensors. Locally, `dg dev` starts both webserver and daemon.
-- Schedules and sensors are off when first deployed unless `default_status=dg.DefaultScheduleStatus.RUNNING` / `dg.DefaultSensorStatus.RUNNING`. `DefaultSensorStatus.STOPPED` is explicit off. The UI and GraphQL API override the default either way.
+- Schedules and sensors are off when first deployed unless `default_status=dg.DefaultScheduleStatus.RUNNING` / `dg.DefaultSensorStatus.RUNNING`. `DefaultSensorStatus.STOPPED` is explicit off. The UI and GraphQL API override the default either way. `default_status` applies only while no state is stored: once someone toggles the sensor or schedule, the stored state wins and changing `default_status` in code changes nothing until the stored state is reset.
 - Toggle and inspect under **Automation** in the UI: the **Running** toggle, the **Last tick** column (a **Failed** badge links to the stack trace), and **Next tick** for the upcoming fire time and timezone.
 - Sensor pages show tick history, skip reasons, errors, and the runs each sensor launched. **Overview > Activity** separates sensor-triggered runs from ad-hoc materializations.
 - `dg check defs` validates that definitions load; `dg list defs` shows what the code location exposes.
@@ -351,7 +358,7 @@ Sensor problems: a tick that consistently fails at ~60 seconds is the evaluation
 
 ## Gotchas
 
-- Sensors and schedules run inside the daemon, not inside a run. Keep them fast, keep them side-effect free where possible, and never do heavy compute there — request a run and do the work in the run.
+- Sensors and schedules are evaluated outside any run: the daemon drives the tick, and the code server (for a `grpc_server` location) runs the function and builds its resources, so their env vars belong on the code server (see `deployment-oss.md`). Keep them fast, keep them side-effect free where possible, and never do heavy compute there — request a run and do the work in the run.
 - A UI test evaluation executes the real function, so any side effect in it will happen.
 - `minimum_interval_seconds` is a floor. A slow evaluation stretches the gap between ticks.
 - Combining `run_key` with a cursor means a cursor reset relaunches nothing unless the underlying data changed, because the run keys repeat. Omit `run_key` if resettability matters more than dedup.

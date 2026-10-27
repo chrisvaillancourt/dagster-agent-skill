@@ -40,7 +40,7 @@ Run execution flow for a run launched from the UI:
 3. **Run worker** — traverses the execution plan.
 4. **Executor** (run config) — runs each step, either in-process, in subprocesses, or in its own container/pod/task.
 
-Runs launched by schedules and sensors follow the same path but start at the daemon. Configuration lives at three levels: instance (`dagster.yaml`), workspace (`workspace.yaml` or `dg.toml`), and run (run config).
+Runs launched by schedules and sensors follow the same path but start at the daemon, which asks the code server to evaluate each tick (see [Gotchas](#gotchas)). Configuration lives at three levels: instance (`dagster.yaml`), workspace (`workspace.yaml` or `dg.toml`), and run (run config).
 
 In production, definitions load inside the code server process, never inside the webserver. The webserver and daemon both hold gRPC clients to every code server and must be able to reach all of them.
 
@@ -398,7 +398,8 @@ Recover the live values with `helm get values  > values.yaml` if the file is gon
 
 - **Version skew breaks gRPC.** Webserver, daemon, code servers and run-worker images must all be the same Dagster version. Mismatches surface as deserialization errors from code locations, not as a clear version message.
 - **SQLite is single-writer.** Any multi-container or multi-replica deployment needs Postgres (or MySQL). This is the most common cause of locking errors in a Compose or Helm setup.
-- **Both host processes need every code server.** The daemon creates runs from schedules and sensors, so a code server reachable only from the webserver silently breaks automation.
+- **Both host processes need every code server.** The daemon drives schedule and sensor ticks and launches the runs they request, so a code server reachable only from the webserver silently breaks automation.
+- **Sensor and schedule code runs in the code server, not the daemon.** For a `grpc_server` location the daemon only asks for each tick over gRPC; the code server evaluates the sensor or schedule function and builds the resources it requests. Env vars those resources read (`dg.EnvVar` fields) must be set on the code server's container. Setting them only on the daemon fails the tick with an "environment variable … is not set" error. A `python_module`/`python_file` location is a subprocess each host process spawns, so there it inherits the daemon's environment.
 - **Run workers need the code.** The run worker must use an image with the same project and dependencies as the code server. `DAGSTER_CURRENT_IMAGE` on the code server is what makes that automatic.
 - **`DAGSTER_HOME` must exist.** Dagster does not create it. A missing directory falls back to ephemeral storage, and history vanishes on restart.
 - **Job-level `dagster-k8s/config` does not reach step pods.** Use `step_k8s_config` on the executor or per-op tags.

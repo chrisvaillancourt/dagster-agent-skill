@@ -9,14 +9,14 @@ The skill is grounded in the official documentation (`https://docs.dagster.io/ll
 ```
 skills/dagster/
 ├── SKILL.md                 # entry point: rules, mental model, task router, canonical patterns
-├── references/              # 19 focused files, loaded on demand (progressive disclosure)
+├── references/              # 20 focused files, loaded on demand (progressive disclosure)
 │   ├── project-setup-and-cli.md      assets.md                partitions-and-backfills.md
 │   ├── schedules-and-sensors.md      declarative-automation.md resources-and-config.md
 │   ├── io-managers.md                components.md            testing-and-asset-checks.md
 │   ├── ops-jobs-and-graphs.md        operations-and-debugging.md deployment-oss.md
 │   ├── dagster-plus.md               pipes-external-execution.md integrations-catalog.md
 │   ├── integrations-dbt-and-elt.md   api-quick-reference.md   migration-and-legacy.md
-│   └── troubleshooting.md
+│   └── troubleshooting.md            reviewing-dagster-code.md
 ├── scripts/
 │   ├── dagster_docs.py          # fetch any docs page (snippets inlined) or API page; search the index
 │   ├── check_project.sh         # dg check yaml → dg check defs → dg list defs → optional launch/tests
