@@ -272,7 +272,7 @@ Context surface: `context.dagster_run`, `context.dagster_event`, `context.instan
 
 Scope with `monitored_jobs=` (job definitions, or `dg.JobSelector(location_name=, repository_name=, job_name=)` / `dg.RepositorySelector` / `dg.CodeLocationSelector` for other code locations), or `monitor_all_code_locations=True` for the whole deployment. Setting both raises an error. With neither, the sensor fires for any job in its own code location only. `request_job=` / `request_jobs=` name what a returned `RunRequest` should launch.
 
-Once `monitored_jobs` is set, runs from the sensor's own location match only the job definitions listed in it, so a list holding only other locations' selectors stops watching the home location. List the home location's selector too. One failure sensor can then cover several locations, instead of a copy per location with duplicated routing config:
+Once `monitored_jobs` is set, runs from the sensor's own location match only a listed job definition or selector, so a list holding only other locations' selectors stops watching the home location. List the home location's selector too. One failure sensor can then cover several locations, instead of a copy per location with duplicated routing config:
 
 ```python
 # lives in the "alerts" location; watches it and "analytics"

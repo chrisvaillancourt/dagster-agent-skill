@@ -24,7 +24,7 @@ grep -rnE "def (teardown|close|cleanup)\(" src/
 
 **Look for:** a settings class (pydantic `BaseSettings`, a dataclass filled from `os.environ`, or a hand-written `from_env()`) that a function builds and returns through `dg.ResourceDefinition(resource_fn=...)` or `@dg.resource`. Often the function also returns a `ConfigurableResource` it constructed itself.
 
-**Use instead:** a `dg.ConfigurableResource` whose fields are bound to `dg.EnvVar("NAME")` (`dg.EnvVar.int("NAME")` for integers) in `Definitions(resources=...)`. Dagster then masks the values in the UI, resolves them when the resource is built, and runs the resource's lifecycle hooks.
+**Use instead:** a `dg.ConfigurableResource` whose fields are bound to `dg.EnvVar("NAME")` (`dg.EnvVar.int("NAME")` for integers) in `Definitions(resources=...)`. Dagster then masks the values in the UI, resolves them when a run or tick processes its config, and runs the resource's lifecycle hooks.
 
 ```python
 class OrdersDb(dg.ConfigurableResource):
@@ -41,7 +41,7 @@ dg.Definitions(resources={"orders_db": OrdersDb(
 
 **Caveats:**
 - `EnvVar` takes no default. Keep defaults as Python field defaults and bind `EnvVar` only for values that must come from the environment.
-- `EnvVar` resolves at resource init, not at definitions load, so a missing variable passes a load check and fails the first run or tick with `... environment variable "NAME" which is not set`. An empty string counts as set; add a field constraint where empty is invalid.
+- `EnvVar` resolves when a run or tick processes its config (execution planning or resource init), not at definitions load, so a missing variable passes a load check and fails the first run or tick with `... environment variable "NAME" which is not set`. An empty string counts as set; add a field constraint where empty is invalid.
 - A `ConfigurableResource` returned from a `resource_fn` gets no `setup_for_execution` / `teardown_after_execution` calls (verified on 1.13), so converting the wrapper is also how its hooks start running.
 - Detail: `resources-and-config.md`.
 
