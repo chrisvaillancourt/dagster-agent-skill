@@ -105,6 +105,8 @@ class MyClientResource(dg.ConfigurableResource):
 | `teardown_after_execution(context)` | Once per run, per process, after execution resolves |
 | `yield_for_execution(context)` | Context manager wrapping both; override for connections that must stay open |
 
+These three names are the whole lifecycle API. Dagster never calls a method named `teardown()`, `close()` or `cleanup()`; put that code in `teardown_after_execution` or after the `yield` in `yield_for_execution`. The hooks run whenever Dagster's resource system builds the `ConfigurableResource` itself: bound in `Definitions(resources=...)` or a job's `resource_defs`, nested inside another resource, or passed to `dg.materialize` / `dg.build_resources`. An instance returned from a legacy `dg.ResourceDefinition(resource_fn=...)` is treated as a plain value: on 1.13 neither `setup_for_execution` nor `teardown_after_execution` runs for it.
+
 With the multiprocess executor each process gets its own instance, so setup and teardown run once per process, not once per run. Do not assume a single initialization. For anything that must stay open for the whole run, override `yield_for_execution` instead of the two hooks:
 
 ```python
@@ -236,7 +238,7 @@ Two mechanisms with different resolution times. Prefer `dg.EnvVar`.
 
 | | `dg.EnvVar("NAME")` | `os.getenv("NAME")` |
 | --- | --- | --- |
-| Resolved | At run launch | At code-location load |
+| Resolved | When Dagster processes a run's or tick's config (execution planning or resource init), not at definitions load | At code-location load |
 | Shown in UI | No (masked in Launchpad, Resources page) | Yes |
 | Use for | Secrets, per-run values, resource/config fields | Choosing which definitions to build at load time |
 
@@ -246,6 +248,8 @@ resources = {"credentials": CredentialsResource(password=dg.EnvVar("MY_PASSWORD"
 ```
 
 `EnvVar` inherits from `str` and populates any string config field. For non-string fields use the typed constructor, for example `dg.EnvVar.int("DATABASE_PORT")`. In YAML or a raw config dict the equivalent is `{"env": "ENVIRONMENT_VARIABLE_NAME"}`. To read a value in plain Python, `dg.EnvVar("DATABASE_NAME").get_value()`.
+
+`EnvVar` takes no default value (`dg.EnvVar("NAME", "fallback")` raises `TypeError`); give the field a Python default and bind `EnvVar` only where the variable must exist. Because it resolves when a run's or tick's config is processed, loading definitions succeeds with the variable unset (`dg.Definitions.validate_loadable(defs)` passes). The first run or tick that needs it fails, possibly at execution planning before any resource initializes, with `You have attempted to fetch the environment variable "NAME" which is not set`. An empty string counts as set: `PASSWORD=` initializes the resource with `""`, so validate non-empty secrets yourself (`password: str = pydantic.Field(min_length=1)` rejects `""` at init, or check in `setup_for_execution`).
 
 **Local development.** Dagster auto-loads a `.env` file found in the folder where the webserver is launched. Reload the workspace in the UI after editing it; the change is not picked up otherwise. `dg list env` shows the environment variables the project uses and whether they are set.
 
@@ -393,6 +397,8 @@ Sensors and schedules are invoked directly with a fake passed by keyword, which 
 - **Secrets never go in `define_asset_job(config=...)`, in metadata, or in `@dg.configured`.** Those values render in the UI. Use `dg.EnvVar` on a resource field.
 - **No external calls at import time.** Resource construction happens at code-location load; do the network work in `setup_for_execution` or the method body, not in the class body or a module-level call.
 - **Setup and teardown run per process.** Anything expensive is paid once per worker under the multiprocess executor.
+- **Only the three lifecycle hooks are called.** A hand-written `teardown()` or `close()` never runs, and a `ConfigurableResource` returned from `ResourceDefinition(resource_fn=...)` gets no hooks at all. Bind the resource directly.
+- **A missing `EnvVar` passes a definitions load.** It fails only when a run or tick processes the config (planning or resource init), and an empty value passes silently.
 - **`.env` needs a workspace reload.** Editing the file while the webserver runs does nothing until the workspace is reloaded in the UI.
 - **Unknown config keys fail the run** unless the model subclasses `dg.PermissiveConfig`, and enums serialize by name in YAML (`ADMIN`, not `admin`).
 
