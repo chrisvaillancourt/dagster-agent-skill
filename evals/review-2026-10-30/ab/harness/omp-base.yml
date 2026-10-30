@@ -1,0 +1,7 @@
+async:
+  enabled: false
+bash:
+  autoBackground:
+    enabled: false
+memory:
+  backend: off

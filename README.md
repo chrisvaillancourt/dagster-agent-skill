@@ -10,9 +10,9 @@ An A/B test on 2026-10-30 compared three setups for Claude Opus 5.5 and GPT-6.1 
 - tools plus a one-line pointer to the Dagster docs;
 - tools plus this skill.
 
-The 38 questions were picked because the models got them wrong without tools. All three setups scored about the same. The skill raised cost by 15% on Opus and 39% on Sol, and one of its stale claims made Sol answer a question wrong.
+The 38 questions were 28 that at least one model got wrong or only partly right without tools, plus 10 controls both got right. All three setups scored about the same. The skill raised cost by 15% on Opus and 39% on Sol, and one of its stale claims made Sol answer a question wrong.
 
-An audit in the same review found 98 wrong, stale or misleading claims across the skill's 20 reference files. Agents that can check against the installed Dagster (`--help`, signatures, a quick script) don't need a curated cache of Dagster facts. The cache goes stale and then misleads them.
+An audit in the same review reported 98 issues (wrong, stale, misleading, self-contradicting or unverifiable claims) across the skill's 20 reference files. Agents that can check against the installed Dagster (`--help`, signatures, a quick script) don't need a curated cache of Dagster facts. The cache goes stale and then misleads them.
 
 The full review, evidence and harness are in [`evals/review-2026-10-30/`](evals/review-2026-10-30/README.md).
 
