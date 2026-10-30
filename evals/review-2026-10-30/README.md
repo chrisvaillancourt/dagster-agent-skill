@@ -22,7 +22,12 @@ The rest of this review was written before the A/B test. It still records what's
   - **S:** the current skill.
 - **Models:** Opus 5.5 ran through `claude -p` with medium effort and no user config. Sol ran through omp with medium thinking, `--no-skills` in T and D, and the skill discoverable in S.
 - **Grading:** blind. Opus 5.5 graders, at high effort, saw the arms as X/Y/Z in a different order per question, and checked disputed keys against the installed Dagster.
-- **Evidence:** `ab/` (questions, answers, grades, the unblinding map, metrics, and the harness `run-one.sh`).
+- **Evidence:** `ab/` (questions, answers, grades, the unblinding map, metrics, and the harness `run-one.sh`, with its inputs in `ab/harness/`).
+- **Integrity checks** (by the Opus reviewer, re-run independently):
+  - Every S run loaded the skill: all 4 Opus S runs called the Skill tool for `dagster-agent-skill:dagster`, and all 4 Sol S runs read `skill://dagster/references/*`.
+  - No T or D run used the skill.
+  - Re-unblinding reproduces every count in the table.
+  - A bash `set -u` crash on empty arrays first killed Opus T and D and Sol S. All 12 of those runs were re-run as whole arms; none was a selective re-run.
 
 | Arm | Opus 5.5 correct / partial / wrong | Opus cost, time | Sol correct / partial / wrong | Sol cost, time |
 | --- | --- | --- | --- | --- |
