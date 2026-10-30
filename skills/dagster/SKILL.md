@@ -17,13 +17,15 @@ Expert guidance for Dagster work. `SKILL.md` is the map: rules, mental model, a 
 ## Rules
 
 1. **Never answer API, CLI or YAML details from memory.** Open the reference file the router names, or run `scripts/dagster_docs.py <docs-path>` / `--api <page>`. Docs beat memory; Dagster's surface changed a lot (the `dg` CLI and components are the default now).
-2. **Modern toolchain only**, unless the user's repo is legacy and they ask to stay there: `uvx create-dagster@latest project`, `dg scaffold defs`, `dg check defs`, `dg dev`, `dg launch`. `dagster dev -m` and `@repository` are superseded, and a single `create-dagster` project needs no `workspace.yaml` (`dg dev` plus `defs/` autoloading). `workspace.yaml` with `grpc_server` (or `python_module`) entries is still the current wiring for OSS deployments that run separate code servers; see `references/deployment-oss.md`.
+2. **Modern toolchain only**, unless the user's repo is legacy and they ask to stay there: `uvx create-dagster@<version> project`, `dg scaffold defs`, `dg check defs`, `dg dev`, `dg launch`. `dagster dev -m` and `@repository` are superseded, and a single `create-dagster` project needs no `workspace.yaml` (`dg dev` plus `defs/` autoloading). `workspace.yaml` with `grpc_server` (or `python_module`) entries is still the current wiring for OSS deployments that run separate code servers; see `references/deployment-oss.md`.
 3. **Assets first.** Model outputs as `@dg.asset` (or components that generate assets). Reach for `@dg.op`/`@dg.job` only for non-asset work or dynamic fan-out.
 4. **`import dagster as dg`** and the `dg.` prefix in all code, as the docs do.
-5. **Verify every change** with the loop in [Verification loop](#verification-loop); do not report success without running it. Run `scripts/check_project.sh` when in a project.
+5. **Verify every change** per [Verification loop](#verification-loop): fast, targeted checks while iterating, then the full loop once before reporting success (`scripts/check_project.sh` when in a project). Do not report success without it.
 6. **Config and secrets** go through `dg.Config` / `dg.ConfigurableResource` fields and `dg.EnvVar("NAME")`, never `os.getenv` at import time and never literals in code, metadata or YAML.
 7. **Legacy code**: before editing an existing project, run `scripts/find_legacy_patterns.py .` and modernize per `references/migration-and-legacy.md` only when asked or when the legacy API blocks the task.
 8. **Do not invent** decorator arguments, CLI flags or `defs.yaml` keys. If a reference and the live docs disagree, the live docs win; note the discrepancy.
+9. **Installs follow the host's policy.** If the repo has its own setup script, run that instead of a bare `uv sync`. Pin `create-dagster` to a released version (the examples use `1.13.27`, the release current when this was written; check PyPI for a newer one) rather than `@latest`. Where the user's rules require a supply-chain wrapper such as Socket Firewall, prefix every install command with it (`sfw uvx …`, `sfw uv add …`, `sfw uv sync`).
+10. **Dagster+ writes need the user's go-ahead.** `dg plus login`, `dg plus deploy` and its subcommands (except `deploy configure`, which only scaffolds local files), `dg plus create`, `dg api … set`, and launching runs against a Dagster+ deployment change shared state. Run them only when the user explicitly asked for that action on a named deployment. Verify Dagster+ work with read-only commands: `dg check defs`, `dg api … get|list --json`.
 
 ## Mental model
 
@@ -50,7 +52,7 @@ Expert guidance for Dagster work. `SKILL.md` is the map: rules, mental model, a 
 | Ops, graphs, jobs, dynamic fan-out, hooks, retries, executors | `references/ops-jobs-and-graphs.md` | `job.execute_in_process()` |
 | `dagster.yaml`, daemon, concurrency/pools, run retries/monitoring, logging, debugging | `references/operations-and-debugging.md` | `dagster instance info` |
 | Deploy OSS: Docker, Kubernetes/Helm, ECS, code servers, images | `references/deployment-oss.md` | `dg check defs` in CI |
-| Dagster+ Serverless/Hybrid, agents, CI/CD, `dg plus`, `dg api`, alerts, Insights, MCP | `references/dagster-plus.md` | `dg plus deploy` · `dg api ... --json` |
+| Dagster+ Serverless/Hybrid, agents, CI/CD, `dg plus`, `dg api`, alerts, Insights, MCP | `references/dagster-plus.md` | `dg check defs` · `dg api ... get/list --json` (deploys need approval, rule 10) |
 | External execution: subprocess, K8s, Databricks, Spark, Lambda/Glue/EMR (Pipes) | `references/pipes-external-execution.md` | `dg launch --assets` |
 | Which integration exists; Snowflake/BigQuery/DuckDB/S3/Slack/BI/ML libs | `references/integrations-catalog.md` | `dg list components` |
 | dbt, dlt, Sling, Fivetran, Airbyte in depth | `references/integrations-dbt-and-elt.md` | `dg check defs` · `dg list defs` |
@@ -63,7 +65,7 @@ Grep a reference before reading it whole when you need one fact: `grep -n "parti
 
 ## Verification loop
 
-Run after every change to definitions, in the project directory:
+While iterating, run the fast checks after each change to definitions: `dg check yaml` (when there are components), `dg check defs`, and only the tests that cover what changed (`uv run pytest tests/test_orders.py -q`). Before reporting done, run the whole loop once, in the project directory:
 
 ```bash
 uv run dg check yaml          # defs.yaml schema errors (skip if no components)
@@ -73,7 +75,7 @@ uv run dg launch --assets my_asset            # execute locally (add --partition
 uv run pytest tests -q                        # unit tests (uv add --dev pytest first: create-dagster ships tests/ but no runner)
 ```
 
-`scripts/check_project.sh [--launch "<selection>"] [--tests]` runs this loop and reports the first failure. Interactive check: `uv run dg dev` then open http://localhost:3000.
+`scripts/check_project.sh [--launch "<selection>"] [--tests]` runs this loop and reports the first failure; use it as the final check, not after every edit. Interactive check: `uv run dg dev` then open http://localhost:3000.
 
 ## Canonical patterns
 
@@ -155,7 +157,7 @@ def test_orders():
 ## dg CLI essentials
 
 ```bash
-uvx create-dagster@latest project my-project && cd my-project && uv sync   # `project .` names the package after the CWD
+uvx create-dagster@1.13.27 project my-project && cd my-project && uv sync   # `project .` names the package after the CWD; install policy: rule 9
 uv run dg scaffold defs dagster.asset assets/orders.py        # path is relative to src/<pkg>/defs/ from any CWD; also: dagster.multi_asset, dagster.schedule, dagster.sensor, dagster.job, dagster.resources
 uv run dg scaffold defs dagster.asset_check checks/orders.py --asset-key orders   # asset_check requires --asset-key
 uv run dg scaffold defs <module.ComponentType> <name> [flags] # component instance (defs.yaml); --format python for component.py
@@ -174,7 +176,7 @@ Prefer `--json` output when you consume the result programmatically. Dagster+ op
 
 ## Scripts
 
-- `scripts/dagster_docs.py <docs-path|URL>` prints any docs page as Markdown with code snippets inlined (source: docs repo). `--search <terms>` searches the docs index; `--api "<page>"` prints an API reference page (`assets`, `asset checks`, `partitions`, `schedules and sensors`, `dagster-dbt library`…); `--list-api` lists them. Run with `uv run python` (or `python3`); stdlib only, cached 24h. Use it whenever a reference file lacks the detail you need.
+- `scripts/dagster_docs.py <docs-path|URL>` prints any docs page as Markdown with code snippets inlined (source: docs repo). `--search <terms>` searches the docs index; `--api "<page>"` prints an API reference page (`assets`, `asset checks`, `partitions`, `schedules and sensors`, `dagster-dbt library`…); `--list-api` lists them. Run with `uv run python`; stdlib only, cached 24h. Use it whenever a reference file lacks the detail you need.
 - `scripts/check_project.sh [dir] [--launch "<selection>"] [--tests]` runs the verification loop with the project's own environment. Exit 0 = all passed.
 - `scripts/find_legacy_patterns.py [path] [--strict] [--json]` lists superseded APIs/files with the replacement and docs page. Run it before modifying an unfamiliar Dagster repo.
 

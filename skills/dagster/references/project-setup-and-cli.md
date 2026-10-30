@@ -21,7 +21,7 @@ How to create, lay out, configure, and drive a Dagster project with the modern t
 Use when starting anything new. `create-dagster` is the only recommended entry point; do not hand-roll the package layout.
 
 ```bash
-uvx create-dagster@latest project my-project   # answer y to the "Run uv sync?" prompt
+uvx create-dagster@1.13.27 project my-project   # pin a release, not @latest; answer y to the "Run uv sync?" prompt
 cd my-project
 source .venv/bin/activate                      # .venv\Scripts\activate on Windows
 dg --version
@@ -29,7 +29,7 @@ dg --version
 
 The prompt runs `uv sync`, which creates `.venv` and `uv.lock`. Pass `--uv-sync` / `--no-uv-sync` to answer it non-interactively (useful in scripts and CI).
 
-Escape hatch without uv: `pip install dagster dagster-webserver dagster-dg-cli`, then `create-dagster project my-project`, `python -m venv .venv`, activate, and `pip install --editable . --group dev` (`--group` needs pip 25.1+; otherwise drop it and `pip install dagster-dg-cli` separately). `create-dagster` is also installable via `brew install dagster-io/tap/create-dagster` or the `https://dg.dagster.io/create-dagster/install.sh` script.
+Escape hatch for a machine without uv (where uv is installed, use the commands above, not pip): `pip install dagster dagster-webserver dagster-dg-cli`, then `create-dagster project my-project`, `python -m venv .venv`, activate, and `pip install --editable . --group dev` (`--group` needs pip 25.1+; otherwise drop it and `pip install dagster-dg-cli` separately). `create-dagster` is also installable via `brew install dagster-io/tap/create-dagster` or the `https://dg.dagster.io/create-dagster/install.sh` script.
 
 Running `dg` afterwards: either activate `.venv` and call `dg ...`, or prefix every call with `uv run dg ...`. The prefix just forces execution inside the project virtualenv; the two are equivalent. Prefer `uv run dg` in scripts and CI where no shell activation has happened.
 
@@ -168,7 +168,7 @@ Custom component types are exposed to `dg` through a Python entry point, convent
 "dagster_dg_cli.registry_modules" = { my_project = "my_project.components" }
 ```
 
-Entry points are registered at install time. After adding or changing one, reinstall the package — `uv sync` will not do it; use `uv pip install -e .` (or `pip install -e .`). Confirm with `dg list registry-modules`.
+Entry points are registered at install time. After adding or changing one, reinstall the package — `uv sync` will not do it; use `uv pip install -e .` (`pip install -e .` only in a project that doesn't use uv). Confirm with `dg list registry-modules`.
 
 User config is optional, at `~/.config/dg.toml` (`%APPDATA%/dg/dg.toml` on Windows), and may contain only a `[cli]` section: `verbose`, `suppress_warnings`, `[cli.telemetry] enabled`, and `[cli.plus]` settings (`organization`, `default_deployment`, `user_token`) that replace the older `.dagster_cloud_cli.yaml`.
 
@@ -179,10 +179,10 @@ Validate any config change with `dg check toml`.
 Use when teams need separate projects, or when dependency conflicts force separate Python environments. One project is the default; do not reach for a workspace early.
 
 ```bash
-uvx create-dagster@latest workspace dagster-workspace && cd dagster-workspace
+uvx create-dagster@1.13.27 workspace dagster-workspace && cd dagster-workspace
 source deployments/local/.venv/bin/activate     # re-activate in every new shell
-uvx create-dagster@latest project projects/project-1
-uvx create-dagster@latest project projects/project-2
+uvx create-dagster@1.13.27 project projects/project-1
+uvx create-dagster@1.13.27 project projects/project-2
 dg list projects
 dg dev                                          # loads every project in the workspace
 ```
