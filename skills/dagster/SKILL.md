@@ -12,6 +12,8 @@ metadata:
 
 # Dagster
 
+> **Retired 2026-10-30.** This skill is no longer maintained, and its references contain known errors (see the repository README). Prefer the installed Dagster (`--help`, signatures, source) and https://docs.dagster.io/llms.txt.
+
 Expert guidance for Dagster work. `SKILL.md` is the map: rules, mental model, a task router, canonical patterns, and the reference files to open. Open exactly the reference(s) the router names; fetch anything else live with `scripts/dagster_docs.py`.
 
 ## Rules
