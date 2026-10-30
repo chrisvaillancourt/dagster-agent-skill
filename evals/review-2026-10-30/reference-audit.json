@@ -1,0 +1,1462 @@
+[
+  {
+    "group": [
+      "project-setup-and-cli.md",
+      "components.md",
+      "reviewing-dagster-code.md"
+    ],
+    "files": [
+      {
+        "file": "references/project-setup-and-cli.md",
+        "value": "medium",
+        "cache_worthy": "Verified-true and non-obvious: DG_PROJECT_PYTHON_EXECUTABLE is read only from the project-root .env (context.py:354-359, shell export ignored); @dg.definitions functions in a defs/ module silently drop module-scope @dg.asset objects in the same file (reproduced); project_root= deprecation message; `dg scaffold defs` path is always relative to defs/; built-in scaffold types (dagster.asset/.job/.resources...) are not listed by `dg list components`; `dg dev` default is an ephemeral temp DAGSTER_HOME; `dg check defs` runs `check yaml` first; app-level [cli] config is disallowed in a workspace member project (warning cli_config_in_workspace_project); workspace create-dagster flow matches 1.13.28 (dg.toml appended automatically). Superseded-pattern table is useful steering away from the `dagster` CLI/workspace.yaml.",
+        "restates": "The dg command cheat sheet (flags are in --help and docs/api/clis/dg-cli), create-project walkthrough and install alternatives (brew/install.sh/pip), project layout tree, 'organizing larger projects' tech-vs-concept trees, the 20-line Sources list, venv activation steps, the `dagster` CLI legacy table (frontier models know this), and generic dev-instance advice.",
+        "cuttable_pct": 35
+      },
+      {
+        "file": "references/components.md",
+        "value": "medium",
+        "cache_worthy": "High-value and verified: template-var arity rule (0 or 1 params, else ValueError at load); Jinja scope (env, env('X','d'), project_root, context.load_component, automation_condition.*) resolves to real Python objects; top-level defs.yaml keys (matches COMPONENT_FILE_SCHEMA); `type` is required even for post_processing-only folders; ComponentTree.for_project/build_defs_at_path and create_defs_folder_sandbox test patterns run green under pytest; Scaffolder/scaffold_with/ComponentTypeSpec/get_spec snippet works end to end; defs state key/management-type facts match docs and code; legacy LEGACY_CODE_SERVER_SNAPSHOTS warning. Highest-risk content is the state-backed snippet and entry-point/uv-sync guidance, which are wrong (see findings).",
+        "restates": "Component table of built-ins, 'Using an existing component' (inspect-component flags are in --help), legacy/superseded table, Dagster+ UI components section (preview, unverifiable), the 20-line Sources list, migration walkthrough (copied from the docs page), env-var section duplicated three times (Templating, Environment variables, Gotchas), and several Gotchas bullets that repeat earlier prose.",
+        "cuttable_pct": 30
+      },
+      {
+        "file": "references/reviewing-dagster-code.md",
+        "value": "high",
+        "cache_worthy": "Every behavioral claim I tested holds in 1.13.28: EnvVar resolves at run/tick config processing not at definitions load (get_repository_def passes, materialize raises DagsterInvalidConfigError with the quoted message); empty string counts as set; ConfigurableResource returned from resource_fn gets no setup/teardown hooks; teardown runs on run failure but not after a raising setup; overriding yield_for_execution replaces the default; monitored_jobs and monitor_all_code_locations raise 'Cannot specify both'; home location must be listed once monitored_jobs is set; CodeLocationSelector coerces to repository '__repository__'. Genuinely things a model gets wrong, and the grep-then-ask-why framing steers behavior.",
+        "restates": "Little; mostly the 'How to use' paragraph and Sources list. The Sources entry cites 1.13.26 source (now 1.13.28) but behavior is unchanged.",
+        "cuttable_pct": 10
+      }
+    ],
+    "findings": [
+      {
+        "file": "references/project-setup-and-cli.md",
+        "line": 171,
+        "kind": "wrong",
+        "claim": "Entry points are registered at install time; after adding or changing one, `uv sync` will not reinstall the package, so use `uv pip install -e .`. Repeated at project-setup:347, components.md:311 and :439, and in the failure-mode paragraph.",
+        "evidence": "Reproduced in a scratch copy with uv 0.13.6 / dagster-dg-cli 1.13.28: appended `[project.entry-points] \"dagster_dg_cli.registry_modules\" = { probe_proj = \"probe_proj.components\" }` to pyproject.toml, ran `uv sync`; output `Uninstalled 1 package / Installed 1 package / ~ probe-proj==0.1.0`, and `importlib.metadata.entry_points(group='dagster_dg_cli.registry_modules')` then listed the new entry point. The claim comes from the docs page migrating-project ('uv sync will not reinstall your package'), which is stale against current uv, whose default cache-keys include pyproject.toml.",
+        "fix": "Say: `uv sync` (or `uv run`) reinstalls the project when pyproject.toml entry points change; if `dg list registry-modules` still lacks the module, force it with `uv sync --reinstall-package <pkg>` or `uv pip install -e .`. Drop 'uv sync will not do it' everywhere.",
+        "verified": true
+      },
+      {
+        "file": "references/components.md",
+        "line": 302,
+        "kind": "misleading",
+        "claim": "Two mechanisms register components (registry_modules config, entry point) and the printed key is always the full dotted path including the defining module (e.g. my_project.components.shell_command.ShellCommand). Entry point is presented as the normal route (project-setup:164-171, migration section).",
+        "evidence": "create-dagster 1.13.28 generates pyproject with `registry_modules = [\"demo_proj.components.*\"]` and NO entry point. dagster_dg_core/component.py:48 `# Only load project plugin modules if there is no entry point`: once an entry point exists, `[tool.dg.project] registry_modules` is ignored. discover_entry_point_package_objects scans only the entry-point module's own namespace, so a class must be re-exported from components/__init__.py; `dg scaffold component Other` then appended `from probe_proj.components.other import Other as Other` and `dg list components --json` printed key `probe_proj.components.Other` (not ...other.Other). Both `probe_proj.components.Other` and `probe_proj.components.other.Other` pass `dg check yaml`/`dg check defs` as `type:`. Without an entry point, the wildcard config alone listed `probe_proj.components.shell_command.ShellCommand` after `dg scaffold component` with no reinstall.",
+        "fix": "State the rule: scaffolded projects use `registry_modules` in [tool.dg.project] and need no entry point or reinstall; add an entry point only for components shipped from an installed package, and know it silently disables registry_modules and requires re-exports in the module `__init__`. Replace 'copy type from dg list components; full dotted path' with 'any importable class path works; dg list components shows the registry key'.",
+        "verified": true
+      },
+      {
+        "file": "references/components.md",
+        "line": 366,
+        "kind": "wrong",
+        "claim": "State-backed component example: `@dataclass class MyStateBackedComponent(dg.StateBackedComponent)` with `defs_state: ResolvedDefsStateConfig = DefsStateConfigArgs.local_filesystem()`.",
+        "evidence": "Ran the exact class in the 1.13.28 scratch project (Python 3.14): `ValueError: mutable default <class 'dagster.components.utils.defs_state.DefsStateConfigArgs'> for field defs_state is not allowed: use default_factory` (surfaces as an 'Entry point error' in every dg command). Python 3.11+ rejects unhashable dataclass defaults; the project supports 3.10-3.14. After switching to `field(default_factory=DefsStateConfigArgs.local_filesystem)` it loaded but `dg check yaml` said `Additional properties are not allowed ('base_url' was unexpected)` until `dg.Resolvable` was added to the bases; `issubclass(dg.StateBackedComponent, dg.Resolvable)` is False. With both fixes `dg check defs` passed and `.local_defs_state` was written. The skill copied the broken example from the StateBackedComponent docstring.",
+        "fix": "Use `class X(dg.StateBackedComponent, dg.Resolvable)` as a dataclass, with `defs_state: ResolvedDefsStateConfig = field(default_factory=DefsStateConfigArgs.local_filesystem)` (import `field`). Add a one-line note that StateBackedComponent is not Resolvable by itself.",
+        "verified": true
+      },
+      {
+        "file": "references/components.md",
+        "line": 438,
+        "kind": "wrong",
+        "claim": "'Environment variables referenced in templates must exist at load time, not just run time.' Implies a missing variable fails the load.",
+        "evidence": "Scratch FunctionComponent with `description: \"{{ env.MISSING_VAR_X }}\"`, `group_name: \"g_{{ env.MISSING_VAR_X }}\"`, `requirements.env` declared, variable unset: `dg check yaml --validate-requirements` and `dg check defs` both succeed ('All definitions loaded successfully.'), and the resolved values were `None` (whole-value template) and `g_None` (interpolated). `dg list envs` shows an empty Value column. Setting the var gave the real value.",
+        "fix": "Replace with: an unset `{{ env.X }}` does not fail validation or load; it silently resolves to None / the string 'None'. `--validate-requirements` checks only that variables are declared, not that they are set. Use `dg list envs` to confirm values and `env('X', 'default')` or a template_var that raises when a value is mandatory.",
+        "verified": true
+      },
+      {
+        "file": "references/components.md",
+        "line": 155,
+        "kind": "misleading",
+        "claim": "post_processing settable attributes are listed, 'a later targeted entry refines a broad earlier one'; no mention of `operation`.",
+        "evidence": "dagster/components/resolved/core_models.py:394-424: AssetPostProcessorModel has `operation: Literal['merge','replace'] = 'merge'`; in merge mode only `metadata` and `tags` are merged and every other attribute is replaced. Reproduced: asset with kinds [a], tags {x:1}, deps [upstream] plus post_processing {kinds:[b], tags:{y:2}, deps:[other]} produced kinds {'b'}, tags {x,y,dagster/kind/b}, deps [other]. Also `key_prefix`/`key` are rejected in post_processing (`extra_forbidden` at dg check defs), and `dg check yaml` does NOT validate post_processing contents (its schema is a bare `object`), so that error only appeared in `dg check defs`.",
+        "fix": "Add: `operation: merge` (default) merges only metadata/tags; kinds, deps, owners, group_name, etc. overwrite what the component set; use `operation: replace` explicitly if intended. Note `dg check yaml` does not validate post_processing; run `dg check defs`.",
+        "verified": true
+      },
+      {
+        "file": "references/components.md",
+        "line": 169,
+        "kind": "wrong",
+        "claim": "Map over specs with `super().build_defs(context).map_asset_specs(fn)`.",
+        "evidence": "inspect.signature: `Definitions.map_asset_specs(self, *, func, selection=None)`. Calling `d.map_asset_specs(lambda s: s)` raised `TypeError: Definitions.map_asset_specs() takes 1 positional argument but 2 were given`; `map_asset_specs(func=...)` works. It also emits a PreviewWarning.",
+        "fix": "Write `.map_asset_specs(func=fn)` and note it is a preview API.",
+        "verified": true
+      },
+      {
+        "file": "references/components.md",
+        "line": 197,
+        "kind": "misleading",
+        "claim": "`dg check yaml` is 'fast, no import' and 'catches attribute typos and type errors without importing your code'. Repeated at :437.",
+        "evidence": "dagster_dg_core/check.py COMPONENT_FILE_SCHEMA types `post_processing.assets` items only as `object`, so a bad post_processing attribute (key_prefix) passed `dg check yaml` and failed only in `dg check defs`. A bad `@dg.template_var` (2 params) also passes `dg check yaml` and fails at load with `ValueError: Template var must have 0 or 1 parameters, got 2`. Conversely `dg check yaml` does import registry/component modules: an unimportable components/ module made it fail with 'Error loading entry point ...'.",
+        "fix": "Say `dg check yaml` validates `attributes` against the component schemas (importing component class modules, not asset modules) and does not cover post_processing contents, template vars or env values; `dg check defs` is the real gate.",
+        "verified": true
+      },
+      {
+        "file": "references/project-setup-and-cli.md",
+        "line": 319,
+        "kind": "wrong",
+        "claim": "`DAGSTER_IS_DEV_CLI=1` is 'Set by `dg dev`'; `DAGSTER_IS_DEFS_VALIDATION_CLI=1` set by `dg check defs`.",
+        "evidence": "dagster_dg_cli/cli/__init__.py:78 runs `os.environ[\"DAGSTER_IS_DEV_CLI\"] = \"1\"` in the top-level `dg` group callback, i.e. for every `dg` subcommand (check defs, list defs, launch, check yaml), not only `dg dev`; `dagster dev` also sets it (dagster/_cli/dev.py:200). `dg check defs` therefore sees both variables. DAGSTER_IS_DEFS_VALIDATION_CLI is set at dagster/_cli/definitions.py:96 and in `dg check defs`.",
+        "fix": "Table row: 'Set by any `dg` command and `dagster dev`'. Warn that gating production-vs-local behavior on DAGSTER_IS_DEV_CLI also changes what `dg check defs`/`dg list defs` load (e.g. schedule default status), so CI validation runs in 'dev' mode.",
+        "verified": true
+      },
+      {
+        "file": "references/project-setup-and-cli.md",
+        "line": 270,
+        "kind": "misleading",
+        "claim": "`dg launch`: 'Launch a run.' with `--assets <selection>`, `--job`, partition flags; used in the verification loop as a general run launcher.",
+        "evidence": "dagster_dg_cli/cli/launch.py: `check.invariant(assets is not None or job is not None, ...)` and `Cannot provide both assets and job` (both reproduced as CheckError); source comment: it 'only works in a project context in local dev/OSS, and executes the selected assets in process using the dagster asset materialize command', not via the instance run launcher, not in a workspace or Dagster+. Running `dg launch --assets 'key:\"my_asset\"'` created and used its own temporary `.tmp_dagster_home_*` storage, so the run does not appear in a separately running `dg dev` UI unless DAGSTER_HOME is shared. The `--assets` help says 'Comma-separated Asset selection'; selection syntax still worked.",
+        "fix": "Describe it as an in-process local materialize/execute: exactly one of --assets/--job, project context only, ephemeral instance unless DAGSTER_HOME is set, not for Dagster+ or workspaces (use `dg api run launch`/the UI there).",
+        "verified": true
+      },
+      {
+        "file": "references/components.md",
+        "line": 216,
+        "kind": "misleading",
+        "claim": "`dg scaffold component ShellCommand --no-model   # pythonic interface, no YAML schema`",
+        "evidence": "`dg scaffold component Nomodel --no-model` generated `class Nomodel(dg.Component, dg.Resolvable)` with an `__init__` whose comment says 'define needed arguments when instantiated in Python, and yaml schema via Resolvable'. A YAML schema is still derived from the annotated `__init__`; only `dg.Model` is dropped.",
+        "fix": "'--no-model: plain class with annotated `__init__` instead of dg.Model (still Resolvable, still has a YAML schema)'.",
+        "verified": true
+      },
+      {
+        "file": "references/project-setup-and-cli.md",
+        "line": 24,
+        "kind": "stale",
+        "claim": "`uvx create-dagster@1.13.27 ...` (also line 182ff) and a layout where `create-dagster project` produces `components/__init__.py` and `uv.lock`.",
+        "evidence": "Current release is 1.13.28; `uvx create-dagster@1.13.28 project demo-proj --no-uv-sync` pins `dagster==1.13.28` in pyproject. The generated tree (find) contains only .dg/telemetry.yaml, .gitignore, pyproject.toml, README.md, src/demo_proj/{__init__,definitions}.py, src/demo_proj/defs/__init__.py, tests/__init__.py: no components/ package (created by `dg scaffold component`) and no uv.lock until sync. Generated pyproject also pre-populates `registry_modules = [\"demo_proj.components.*\"]`, whereas the doc says default []. `--uv-sync/--no-uv-sync` and workspace layout/dg.toml behavior match.",
+        "fix": "Bump the pin to 1.13.28 (or say 'pin the current release') and drop components/ and uv.lock from the 'as generated' tree; mention registry_modules is pre-populated.",
+        "verified": true
+      },
+      {
+        "file": "references/project-setup-and-cli.md",
+        "line": 289,
+        "kind": "misleading",
+        "claim": "`dg` loads `.env` automatically; only DG_PROJECT_PYTHON_EXECUTABLE is called out as .env-only. No precedence is stated between `.env` and exported variables.",
+        "evidence": "Scratch project with `.env` containing ENV_FILE_VAR=fromdotenv: `dg list defs --json` resolved `{{ env.ENV_FILE_VAR }}` to 'fromdotenv' both with and without `ENV_FILE_VAR=fromshell` exported; only after moving .env away did the shell value win. So a project `.env` overrides the shell environment for dg commands.",
+        "fix": "Add: values in the project `.env` take precedence over exported shell variables; in CI, don't ship a stale `.env`, and don't expect `export X=...` to override it.",
+        "verified": true
+      },
+      {
+        "file": "references/project-setup-and-cli.md",
+        "line": 173,
+        "kind": "misleading",
+        "claim": "User config at `~/.config/dg.toml` (`%APPDATA%/dg/dg.toml` on Windows).",
+        "evidence": "dagster_shared/utils/config.py:12-17: Windows path is `Path.home()/'AppData'/'dg'/'dg.toml'` (not Roaming %APPDATA%); POSIX honors `XDG_CONFIG_HOME`; line 44: `DG_CLI_CONFIG` env var overrides the path entirely. (The docs page also says %APPDATA%.)",
+        "fix": "Say: `$XDG_CONFIG_HOME/dg.toml` (default ~/.config/dg.toml), overridable with `DG_CLI_CONFIG`; on Windows `~/AppData/dg/dg.toml`. Low priority.",
+        "verified": true
+      }
+    ],
+    "probes": [
+      {
+        "question": "In a Dagster 1.13 project, my component's defs.yaml uses `description: \"token={{ env.API_TOKEN }}\"` and API_TOKEN is not set anywhere. What do `dg check yaml --validate-requirements` and `dg check defs` do, and what ends up in the asset description?",
+        "answer": "Both pass. An unset `{{ env.X }}` does not fail at load; it silently renders as None (whole-value template) or the string 'None' inside an interpolated string, so the description becomes 'token=None'. --validate-requirements only checks that the variable is declared under requirements.env, not that it is set. Verified on dagster 1.13.28.",
+        "wrong_answer_trap": "It fails validation/load with a missing environment variable error (the skill itself says env vars 'must exist at load time').",
+        "source": "components.md:438"
+      },
+      {
+        "question": "A defs/ module contains a module-level `@dg.asset` and also a `@dg.definitions` function returning `dg.Definitions(...)`. After `dg list defs`, which assets show up and is there a warning?",
+        "answer": "Only the assets in the Definitions returned by the @dg.definitions function load; the module-scope @dg.asset is skipped with no warning (reproduced). Keep @dg.definitions functions in their own module.",
+        "wrong_answer_trap": "Both load and merge, or Dagster warns/raises about the duplicate or skipped definition.",
+        "source": "project-setup-and-cli.md:93"
+      },
+      {
+        "question": "A defs.yaml has `post_processing: assets: [{attributes: {kinds: [b], tags: {y: '2'}}}]` and the component already sets `kinds: [a]` and `tags: {x: '1'}` on its asset. What are the final kinds and tags, and does `dg check yaml` validate the post_processing keys?",
+        "answer": "Default `operation: merge` merges only tags and metadata, so tags become {x, y} but kinds is replaced: {b} only (same for deps, owners, group_name). `operation: replace` replaces everything. `dg check yaml` does not validate post_processing contents (its schema is just `object`); bad keys such as key_prefix fail only in `dg check defs`.",
+        "wrong_answer_trap": "kinds {a, b} (merged) and `dg check yaml` catches bad post_processing attributes.",
+        "source": "components.md:155"
+      },
+      {
+        "question": "I wrote a custom StateBackedComponent as `@dataclass class X(dg.StateBackedComponent)` with `defs_state: ResolvedDefsStateConfig = DefsStateConfigArgs.local_filesystem()` (copied from the Dagster docstring) and every dg command now errors. What is wrong and what is the fix?",
+        "answer": "Dataclasses on Python 3.11+ reject the unhashable pydantic default: `ValueError: mutable default ... DefsStateConfigArgs ... use default_factory`. Use `field(default_factory=DefsStateConfigArgs.local_filesystem)`. Also add `dg.Resolvable` to the bases, because StateBackedComponent is not Resolvable and otherwise defs.yaml attributes are rejected ('Additional properties are not allowed').",
+        "wrong_answer_trap": "Suggests a missing entry point/reinstall, or a wrong management_type enum, or that the snippet is fine as written.",
+        "source": "components.md:366-382"
+      },
+      {
+        "question": "I added a `[project.entry-points] \"dagster_dg_cli.registry_modules\"` entry to pyproject.toml of my uv-managed Dagster project. Do I need `uv pip install -e .`, and what happens to the `registry_modules` list in [tool.dg.project]?",
+        "answer": "With current uv, plain `uv sync` detects the pyproject change and reinstalls the package, registering the entry point (verified, uv 0.13.6). Once an entry point exists, dg ignores `[tool.dg.project] registry_modules` entirely, and discovers only objects exposed in the entry-point module's own namespace (so classes must be re-exported in components/__init__.py, which `dg scaffold component` then does). Scaffolded projects don't need an entry point at all.",
+        "wrong_answer_trap": "'uv sync will not reinstall the package; you must run uv pip install -e .' and that both mechanisms are combined.",
+        "source": "project-setup-and-cli.md:171, components.md:311"
+      },
+      {
+        "question": "My `dg check defs` in CI behaves differently from production because code branches on `os.getenv('DAGSTER_IS_DEV_CLI')`. Why, and which dg commands set that variable?",
+        "answer": "The top-level `dg` group sets DAGSTER_IS_DEV_CLI=1 for every dg command (check defs, list defs, launch, check yaml...), not just `dg dev` (also set by `dagster dev`). `dg check defs` additionally sets DAGSTER_IS_DEFS_VALIDATION_CLI=1.",
+        "wrong_answer_trap": "Only `dg dev` sets DAGSTER_IS_DEV_CLI, so `dg check defs` sees the production code path.",
+        "source": "project-setup-and-cli.md:319-324"
+      },
+      {
+        "question": "I call `defs.map_asset_specs(lambda spec: spec.replace_attributes(partitions_def=pdef))` inside a Component.build_defs override. What happens in 1.13.28?",
+        "answer": "TypeError: `Definitions.map_asset_specs()` takes 1 positional argument but 2 were given; the signature is keyword-only (`func=`, optional `selection=`). It is also a preview API (PreviewWarning).",
+        "wrong_answer_trap": "It works and returns a Definitions with the mapped specs.",
+        "source": "components.md:169"
+      },
+      {
+        "question": "Which launcher does `dg launch --assets 'key:\"customers\"'` use, and will the resulting run appear in the UI of a `dg dev` instance I have running in another terminal?",
+        "answer": "`dg launch` does not use the instance run launcher or the daemon: it executes the selection in-process (it calls the `dagster asset materialize` / job execute implementation), requires exactly one of --assets or --job, works only in a project context (not workspaces or Dagster+), and writes to its own ephemeral temp instance (`.tmp_dagster_home_*`) unless DAGSTER_HOME is shared, so it won't show up in an unrelated `dg dev` UI.",
+        "wrong_answer_trap": "It submits a run to the running dg dev instance through the run launcher, visible in its UI, and can target workspaces or Dagster+ deployments.",
+        "source": "project-setup-and-cli.md:270"
+      }
+    ]
+  },
+  {
+    "group": [
+      "assets.md",
+      "partitions-and-backfills.md",
+      "io-managers.md"
+    ],
+    "files": [
+      {
+        "file": "references/assets.md",
+        "value": "medium",
+        "cache_worthy": "Non-obvious and verified true in 1.13.28: output_required=False only skips on yield (returning None still materializes: 1 event vs 0). Tag and owner validation (key segments <=63 chars, values restricted to alphanumerics plus -_. so 'has space' is rejected, kinds capped at 10, owners must be email or team:x). deps vs parameter decision rule and that deps passes no data. Runtime metadata is not readable from InputContext (upstream_output.output_metadata == {}). Cross-code-location assets never share a run. Observations cost no Dagster+ credits (docs-confirmed). Unsynced is not transitive. can_subset semantics. Legacy-to-modern table (SourceAsset, compute_kind, non_argument_deps, AssetSelection.keys are all deprecated, removed in 2.0).",
+        "restates": "The @dg.asset parameter table (inspect.signature gives the same), the full MetadataValue constructor table, the execution-context member table, the reserved dagster/ tag-prefix list, the 10 near-identical dg launch selection examples, the AssetSelection constructor list, the granularity table, the asset-factory boilerplate, and 24 Sources URLs (all return 200, but a model can fetch them via the bundled dagster_docs.py).",
+        "cuttable_pct": 40
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "value": "high",
+        "cache_worthy": "Verified-and-surprising: end_offset semantics (-1/0/1 give 05-18/05-19/05-20 on 2024-05-20, schedule ticks target the latest completed partition); a Wednesday start_date on WeeklyPartitionsDefinition makes the first key the next Sunday (2024-05-05) unless day_offset=3; single_run backfills raise on context.partition_key and fail at handle-output with the default IO manager if a value is returned; get_last_partition_key takes no current_time so partition_loading_context(effective_dt=) is required; delete_dynamic_partition is singular; MultiPartitionKey ordering and keys_by_dimension; TimeWindowPartitionMapping offsets are in downstream units; SensorResult registers dynamic keys atomically; automation conditions (on_cron/eager/on_missing) only consider the latest time partition (matches the library docstrings).",
+        "restates": "The partitions-definition class table and parameter lists (signatures), the PartitionedConfig decorator list, the batch-size tables and scenario table (copied from a docs best-practices page), the cadence-factor comparison table, the test snippets, the dynamic-partition retention-sensor prose, and 16 Sources URLs.",
+        "cuttable_pct": 30
+      },
+      {
+        "file": "references/io-managers.md",
+        "value": "medium",
+        "cache_worthy": "I/O manager vs deps= decision rule. definition_metadata means different things on each side (verified: InputContext.definition_metadata == AssetIn metadata, upstream_output.definition_metadata is the upstream asset's, output_metadata == {}). dict[str, T] fan-in for time-window mappings and that missing partitions raise unless allow_missing_partitions is set (verified: works as AssetIn metadata). DB I/O-manager conventions (schema precedence matches dagster/_core/storage/db_io_manager.py). materialize_to_memory raises DagsterInvariantViolationError if an io_manager resource is also passed (verified). Generator resources in build_input_context need 'with'. Delta S3 locking, BigQuery write_mode, Iceberg namespace pre-creation (docs-confirmed).",
+        "restates": "The per-library install/class table (names are in the integration docs), the object-store pickle constructor examples, most of the context-members table, the custom IOManager boilerplate and the legacy-name rename table, the testing snippets, and 14 Sources URLs.",
+        "cuttable_pct": 40
+      }
+    ],
+    "findings": [
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 184,
+        "kind": "wrong",
+        "claim": "The CLI bullet presents `dg launch --assets my_asset --partition-range A...B` as a general way to launch a range, followed by 'Any multi-partition materialization needs the Dagster daemon'. In 1.13.28 `dg launch` runs the selection in-process (no backfill, no daemon) and --partition-range only works when every selected asset has BackfillPolicy.single_run(). The 'one step and seven materializations' sentence at L200 is only true under that precondition.",
+        "evidence": "dagster_dg_cli/cli/launch.py calls asset_materialize_command_impl in-process (source comment: 'executes the selected assets in process'). dagster/_cli/asset.py:165-178 raises: 'Partition ranges with the CLI require all selected assets to have a BackfillPolicy.single_run() policy ... Assets without this policy would require creating a backfill ... which needs a running daemon'. Ran `dg launch -f assets.py --assets multi --partition-range 2024-05-01...2024-05-07` (multi_run(3)) and the same for a default-policy asset: both CheckError. With single_run over 3 days: 1 STEP_SUCCESS and 3 ASSET_MATERIALIZATION events.",
+        "fix": "State that `dg launch --partition-range` is a local in-process run that requires single_run() on every selected asset and errors otherwise; multi-run and default-policy backfills go through the UI or `dagster job backfill` with a daemon.",
+        "verified": true
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 400,
+        "kind": "wrong",
+        "claim": "Legacy table maps '`dagster` CLI backfill invocations' to `dg launch --assets ... --partition-range ...`. These are not equivalent: `dg launch` is in-process and single_run-only, while `dagster job backfill` still exists in 1.13.28 and creates a daemon-processed backfill.",
+        "evidence": "`uv run dagster job backfill --help` prints 'Backfill a partitioned job.' dg launch code path shown above rejects ranges unless single_run. dg has no backfill command (dg launch is the only launch verb).",
+        "fix": "Delete the row, or say 'dagster job backfill remains the CLI route for daemon backfills; dg launch --partition-range is only for local single_run runs'.",
+        "verified": true
+      },
+      {
+        "file": "references/io-managers.md",
+        "line": 79,
+        "kind": "wrong",
+        "claim": "Tells agents to run `dg scaffold defs dagster.resources src/<project_name>/defs/resources.py`. DEFS_PATH is relative to the project's defs/ directory, so this creates a nested src/<project>/defs/src/<project>/defs/resources.py that autoloads as a bogus module path. assets.md:22 has the same ambiguity ('<path/to/assets.py>; the file must live under src/<project>/defs/').",
+        "evidence": "In a scratch copy of the probe project: `dg scaffold defs dagster.resources src/probe_proj/defs/resources.py` printed 'Creating defs at .../src/probe_proj/defs/src/probe_proj/defs/resources.py'. `dg scaffold defs dagster.resources resources.py` printed 'Creating defs at .../src/probe_proj/defs/resources.py'. Same for dagster.asset (assets3.py nested).",
+        "fix": "Use `dg scaffold defs dagster.resources resources.py` (path relative to defs/) and say so in assets.md:22.",
+        "verified": true
+      },
+      {
+        "file": "references/assets.md",
+        "line": 351,
+        "kind": "wrong",
+        "claim": "Selection table says `tag:\"stage\"` means 'Tag presence'. In 1.13.28 it matches only assets whose tag value is the empty string; an asset with stage=prod is not selected. (The docs page says 'tagged with stage', so the skill copied a docs claim that the code does not honor.)",
+        "evidence": "AssetSelection.from_string('tag:\"stage\"').resolve(graph) with assets a(tags={'stage':''}) and b(tags={'stage':'prod'}) returned ['a'] only; 'tag:\"stage\"=\"prod\"' returned ['b']; 'tag:\"stage\"=\"\"' returned ['a']. Same on a graph where the only stage tag was 'prod': result [].",
+        "fix": "Say `tag:\"k\"` matches key k with an empty value, and use `tag:\"k\"=\"v\"` for a value; no presence-only form (verify before relying on it).",
+        "verified": true
+      },
+      {
+        "file": "references/assets.md",
+        "line": 345,
+        "kind": "misleading",
+        "claim": "Says the same selection grammar works in `dg launch --assets` and `dg.define_asset_job(selection=)`, and lists `code_location:\"repo1\"` in the table. In user code (Python resolve, dg launch) code_location raises. Also `dg launch --assets` splits the string on commas before parsing.",
+        "evidence": "`dg launch -f assets.py --assets 'code_location:\"x\"'` ends in 'CheckError: Invariant failed. Description: code_location: cannot be used to select assets in user code.' AssetSelection.from_string('code_location:\"x\"').resolve(...) raises the same. asset.py:118 uses AssetSelection.from_coercible(select.split(',')). Not tested: dg list defs --assets and the UI.",
+        "fix": "Mark code_location as UI/workspace-level only (not valid for dg launch or define_asset_job); note commas split --assets into separate selections.",
+        "verified": true
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 372,
+        "kind": "internal-conflict",
+        "claim": "L372 says on_missing 'for time-partitioned assets requests only the latest time partition', then L375 says 'To reach older time partitions, use on_missing() or compose with in_latest_time_window(lookback_delta=...)'. The first is correct; on_missing cannot reach older time partitions.",
+        "evidence": "AutomationCondition.on_missing.__doc__: 'For time partitioned assets, only the latest time partition will be considered.' Docs declarative-automation line 99 says the same. in_latest_time_window(lookback_delta=) exists with that signature.",
+        "fix": "Rewrite L375: to reach older partitions, widen the window with in_latest_time_window(lookback_delta=...) in a custom condition; do not suggest on_missing().",
+        "verified": true
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 80,
+        "kind": "wrong",
+        "claim": "'Verify the set with `dg list defs`' to check partition keys. dg list defs does not show partitions.",
+        "evidence": "dagster_dg_cli/cli/list.py DefsColumn enum: key, group, deps, kinds, description, tags, cron, is_executable; grep -n partition list.py returns nothing.",
+        "fix": "Verify with `partitions_def.get_partition_keys()` in `uv run python`, or the UI; drop dg list defs here.",
+        "verified": true
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 301,
+        "kind": "misleading",
+        "claim": "'Op jobs partition through run config, not partitions_def' is false for 1.13.28: @dg.job(partitions_def=...) works for op jobs and context.partition_key is available. PartitionedConfig is one route, not the only one; an agent will skip the simpler route.",
+        "evidence": "inspect.signature(dg.job) includes partitions_def. Test: @dg.job(partitions_def=dg.StaticPartitionsDefinition(['a','b'])) with an op reading context.partition_key; execute_in_process(partition_key='a') logged 'PK=a' and succeeded.",
+        "fix": "Say op jobs accept partitions_def directly or a PartitionedConfig when run config must be derived from the key.",
+        "verified": true
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 115,
+        "kind": "misleading",
+        "claim": "'Mixing partitioned and unpartitioned assets requires you to say what you mean ... set one explicitly rather than relying on inference' implies there is no usable default. The default for an unpartitioned downstream over a partitioned upstream is AllPartitionMapping.",
+        "evidence": "Resolved asset graph for up (daily) -> down (deps=[up], unpartitioned): get_partition_mapping returned dagster...mapping.all.AllPartitionMapping.",
+        "fix": "State the default (AllPartitionMapping) and that LastPartitionMapping must be set explicitly.",
+        "verified": true
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 91,
+        "kind": "misleading",
+        "claim": "'partition_time_window raises if the partitions definition is not a TimeWindowPartitionsDefinition' omits that a MultiPartitionsDefinition with exactly one time dimension also works.",
+        "evidence": "Error text from a StaticPartitionsDefinition asset: 'Expected a TimeWindowPartitionsDefinition or MultiPartitionsDefinition with a single time dimension, but instead found ...'.",
+        "fix": "Add 'or a MultiPartitionsDefinition with a single time dimension'.",
+        "verified": true
+      },
+      {
+        "file": "references/assets.md",
+        "line": 407,
+        "kind": "stale",
+        "claim": "'Asset keys cannot contain `.`' (also L325 comment and the `name` row at L48, 'Letters/digits/_ only') is not enforced in 1.13.28: names with . and - define and materialize fine. Sanitizing is harmless, but the stated rule is wrong and 'fails at load' framing misleads debugging.",
+        "evidence": "@dg.asset(name='a.b') and name='c-d' gave AssetKey(['a.b']) and AssetKey(['c-d']); dg.materialize succeeded for both and Definitions resolved. Only spaces and Python keywords raised ('Names must be in regex ^[A-Za-z0-9_]+$'). Docs page creating-asset-factories still carries the comment, so the skill copied it.",
+        "fix": "Reword: avoid '.' and '-' in generated names because they break selection strings and downstream tooling (state only what was verified), or drop the 'cannot' claim.",
+        "verified": true
+      },
+      {
+        "file": "references/io-managers.md",
+        "line": 221,
+        "kind": "misleading",
+        "claim": "'Setting the allow_missing_partitions metadata value to True skips missing partitions' never says where. Without it, fan-in over partially materialized upstream partitions raises; it must be set on the consuming AssetIn(metadata=...), which is what InputContext.definition_metadata exposes.",
+        "evidence": "Hourly->daily dict[str, dict] fan-in with 3 of 24 hourly partitions materialized failed with FileNotFoundError; adding ins={'up': dg.AssetIn(metadata={'allow_missing_partitions': True})} made the run succeed. upath_io_manager.py:353 reads context.definition_metadata.get('allow_missing_partitions').",
+        "fix": "Add the snippet: `ins={\"up\": dg.AssetIn(metadata={\"allow_missing_partitions\": True})}`.",
+        "verified": true
+      },
+      {
+        "file": "references/io-managers.md",
+        "line": 339,
+        "kind": "internal-conflict",
+        "claim": "The testing snippet uses `MyIOManager()` with a `storage_dict`, but MyIOManager defined at L128 has a `path_prefix` field and CSV writes, no storage_dict. Copy-pasting both fails. partitions-and-backfills.md has the same pattern: the config is defined as `partitioned_config` (L306) but tests call `my_partitioned_config` (L326+).",
+        "evidence": "io-managers.md L128-140 vs L326-340; partitions-and-backfills.md L306 vs L326/L329/L333. (I did run an equivalent daily_partitioned_config with validate_run_config, get_partition_keys, get_run_config_for_partition_key and execute_in_process(partition_key=); all behaved as the skill says.)",
+        "fix": "Give the test snippet its own self-contained manager, and rename the config in one of the two snippets.",
+        "verified": true
+      },
+      {
+        "file": "references/partitions-and-backfills.md",
+        "line": 390,
+        "kind": "unverifiable",
+        "claim": "'Static sets beat dynamic ones ... static_partitioned_config loads partition views faster in the UI than the dynamic equivalent (unverified)'. The skill itself flags it unverified, and the partitioning-ops docs page shows no such claim.",
+        "evidence": "grep of guides/build/partitions-and-backfills/partitioning-ops for 'faster' returned no hits.",
+        "fix": "Delete the bullet.",
+        "verified": true
+      },
+      {
+        "file": "references/assets.md",
+        "line": 117,
+        "kind": "misleading",
+        "claim": "AssetIn 'Fields' list omits input_manager_key, which io-managers.md relies on (L94) and which is a real field. AssetDep also accepts metadata=.",
+        "evidence": "inspect.signature(dg.AssetIn.__new__): key, metadata, key_prefix, input_manager_key, partition_mapping, dagster_type. AssetDep.__new__: asset, *, partition_mapping, metadata.",
+        "fix": "Add input_manager_key to the field list.",
+        "verified": true
+      }
+    ],
+    "probes": [
+      {
+        "question": "I want to run an asset with default backfill settings over a range of daily partitions locally using the dg CLI: `dg launch --assets my_asset --partition-range 2024-05-01...2024-05-07`. Will that work on Dagster 1.13.x, and what has to be true of the asset if not?",
+        "answer": "It fails with a CheckError. `dg launch` runs in-process (no daemon, no backfill) and --partition-range requires every selected asset to have BackfillPolicy.single_run(); multi_run or the default one-run-per-partition policy are rejected and need the UI or `dagster job backfill` with a daemon.",
+        "wrong_answer_trap": "That dg launch queues a backfill that creates one run per partition (handled by the daemon).",
+        "source": "partitions-and-backfills.md:184,200 (corrected by dagster/_cli/asset.py:165-178)"
+      },
+      {
+        "question": "An asset uses backfill_policy=dg.BackfillPolicy.single_run() with a daily partitions_def. In the body I call context.partition_key and return a DataFrame. What goes wrong when it is backfilled over several days, and how do you fix it?",
+        "answer": "Two failures: context.partition_key raises DagsterInvariantViolationError for a run covering a range (use partition_time_window, partition_key_range or partition_keys), and returning a value fails at handle-output because the default filesystem I/O manager cannot persist one object for multiple partitions. Write the data yourself and return None or dg.MaterializeResult(metadata=...). A 3-day range logs 1 step and 3 materializations.",
+        "wrong_answer_trap": "Thinking Dagster fans the value out per partition or that partition_key returns the first key.",
+        "source": "partitions-and-backfills.md:91,200,382"
+      },
+      {
+        "question": "A daily-partitioned asset has a schedule built with build_schedule_from_partitioned_job(job, hour_of_day=1, minute_of_hour=30). On 2024-05-20 at 01:30 the tick fires. Which partition does it run, and what changes the answer?",
+        "answer": "2024-05-19, the latest completed partition (default end_offset=0). Setting end_offset=1 on the DailyPartitionsDefinition makes the same tick run 2024-05-20. hour_of_day/minute_of_hour only shift tick time, not the chosen partition.",
+        "wrong_answer_trap": "Running the partition for the current date (2024-05-20), or adjusting hour_of_day to change which partition is selected.",
+        "source": "partitions-and-backfills.md:61-67,275"
+      },
+      {
+        "question": "A downstream daily asset takes `up: dict[str, pd.DataFrame]` from an hourly upstream using a UPathIOManager-based I/O manager (the default filesystem one). Only 3 of the 24 hourly partitions for the day exist. What happens, and how do you let the downstream run?",
+        "answer": "Loading raises (FileNotFoundError, wrapped in DagsterExecutionLoadInputError) because missing partitions are errors by default. Put allow_missing_partitions=True in the consuming input's metadata: ins={'up': dg.AssetIn(metadata={'allow_missing_partitions': True})}; the dict then contains just the 3 present keys.",
+        "wrong_answer_trap": "That the input silently contains whatever exists, or that the flag goes on the upstream asset or I/O manager config.",
+        "source": "io-managers.md:209,221"
+      },
+      {
+        "question": "Inside an I/O manager's load_input, I want the table name stored in the upstream asset's metadata, and also a value that the upstream asset reported via MaterializeResult(metadata=...). What do context.definition_metadata, context.upstream_output.definition_metadata and context.upstream_output.output_metadata give me?",
+        "answer": "InputContext.definition_metadata is the metadata on the consuming AssetIn/In (not the upstream asset's). upstream_output.definition_metadata is the upstream asset's definition metadata (use it for table names). upstream_output.output_metadata is {} during load_input: runtime metadata from MaterializeResult/Output is event-log only and not visible to I/O managers.",
+        "wrong_answer_trap": "That context.definition_metadata in load_input holds the upstream asset's metadata, and that MaterializeResult metadata can be read back via upstream_output.output_metadata.",
+        "source": "io-managers.md:147,352-353; assets.md:200"
+      },
+      {
+        "question": "An asset is declared with @dg.asset(output_required=False) and I want it to skip materialization on some runs. My function does `if nothing_new: return None`. Does that skip materialization?",
+        "answer": "No. A return, even of None, still records a materialization (and logs a warning about a value returned for a non-required output). Only a generator that yields nothing (or yields conditionally) skips: with `return` I got 1 materialization event, with a generator that yields nothing I got 0.",
+        "wrong_answer_trap": "That output_required=False makes return None skip the materialization.",
+        "source": "assets.md:48 table (output_required row), assets.md:408"
+      },
+      {
+        "question": "I define a WeeklyPartitionsDefinition(start_date=\"2024-05-01\") (a Wednesday) with default settings. What is the first partition key, and how do I cover the days from May 1 onward?",
+        "answer": "The first key is 2024-05-05 (the first Sunday on or after start_date), so May 1-4 belong to no partition. Set day_offset=3 so the first key is 2024-05-01 and weeks start on Wednesday.",
+        "wrong_answer_trap": "That the first key is 2024-05-01 or the preceding Sunday (2024-04-28).",
+        "source": "partitions-and-backfills.md:43"
+      },
+      {
+        "question": "In a new dg project I want an assets file at src/my_proj/defs/sales/assets.py. What exact path argument do I pass to `dg scaffold defs dagster.asset`, and what happens if I pass the full src/... path?",
+        "answer": "Pass the path relative to the project's defs/ directory: `dg scaffold defs dagster.asset sales/assets.py`. Passing src/my_proj/defs/sales/assets.py creates a nested src/my_proj/defs/src/my_proj/defs/sales/assets.py under defs/. Confirmed on dg 1.13.28.",
+        "wrong_answer_trap": "That the argument is a repo-relative path including src/<project>/defs (as io-managers.md:79 shows) or that dg scaffold normalizes it.",
+        "source": "io-managers.md:79; assets.md:22"
+      }
+    ]
+  },
+  {
+    "group": [
+      "schedules-and-sensors.md",
+      "declarative-automation.md",
+      "ops-jobs-and-graphs.md"
+    ],
+    "files": [
+      {
+        "file": "references/schedules-and-sensors.md",
+        "value": "medium",
+        "cache_worthy": "Behavior a pre-2026 model would get wrong, all confirmed in 1.13.28: asset `target=` creates a hidden `__anonymous_asset_job_<schedule>` that `dg list defs` does not list, and `dg list defs` shows cron but not `execution_timezone`. `build_schedule_from_partitioned_job` inherits the partitions-def timezone and targets the previous partition (2024-05-19 on a 05-20 tick). `get_last_partition_key()` takes no `current_time`, so use `partition_loading_context(effective_dt=)`. DST rules (spring-forward 2:30 runs 3:00; fall-back 1:30 runs the second occurrence). Run-status `monitored_jobs` scoping: a list of only other locations' selectors stops watching the home location, and `build_run_status_sensor_context` skips matching. A `run_key` plus cursor reset relaunches nothing. Asset sensors get only the latest materialization per tick. Sensor 60s timeout escalation ladder. UI preview runs the real function.",
+        "restates": "Choosing-method table, basic `ScheduleDefinition` and `@sensor` examples, cron basics, UI toggle and menu walkthrough, the 5-step schedule troubleshooting list (nearly verbatim from the docs), the sensor daemon description, `SensorResult` field list, the DagsterRunStatus list, the testing helper signatures (visible via `inspect`), the legacy table, and 22 source URLs. The JSON, scaffold and `dg list defs`/`dg check defs` commands are discoverable from `--help`.",
+        "cuttable_pct": 35
+      },
+      {
+        "file": "references/declarative-automation.md",
+        "value": "high",
+        "cache_worthy": "Highest-value file of the three. Models still reach for `eager()` when they mean 'all deps updated' (it fires on any dep) and for `AutoMaterializePolicy`. Confirmed in 1.13.28: the default sensor starts STOPPED, runs every ~30s, and is created from the remote layer rather than `Definitions`. Built-ins are label-addressable trees, and `.replace('handled'|'any_deps_updated'|'in_latest_time_window', ...)`, `.without`, `.allow` and `.ignore` work as documented. Time-partitioned assets get only the latest partition. `on_cron` acts as a synchronization barrier. Custom Python conditions need `use_user_code_server=True` (500-target cap). `default_condition` requires user-code. Job conditions reject a PartitionedConfig and mixed partitions defs. The reactivation-burst recipe. The warning not to hand-build 'all deps updated since target'. `evaluate_automation_conditions` needs `cursor=` threading.",
+        "restates": "The operand and operator tables mostly restate the API reference. The 'Dagster 1.5 or later' prerequisite, the legacy table, a muddled FreshnessPolicy line, the 'Contents' list and 14 source URLs add little. The sensor-parameter table is partly derivable from `inspect.signature`. The migration table is useful but verbose.",
+        "cuttable_pct": 30
+      },
+      {
+        "file": "references/ops-jobs-and-graphs.md",
+        "value": "low",
+        "cache_worthy": "Only these change behavior: assets-vs-ops rule and the dynamic-vs-multiprocess rule of thumb; `Failure(allow_retries=False)` bypasses RetryPolicy (confirmed 1 call vs 4); retry precedence (invocation over definition over job, confirmed); `execute_in_process` ignores `executor_def`; `execute_job` needs a persistent instance (ephemeral fails); `in_process:`/`multiprocess:` selector keys exist only on the default executor; per-run-only `tag_concurrency_limits`; yield-and-return are mutually exclusive; dynamic outputs accept only map/collect; the Nothing-dependency kwarg wiring; and `--job` vs docs' `--jobs`. Any agent consuming it already knows ops, graphs and jobs well.",
+        "restates": "Op/graph/job decorator basics, the event table, hooks, backoff formulas, the executor table, the full solid/pipeline legacy table (removed in 1.0), job-parameter lists (use `inspect.signature`), config-mapping boilerplate and 22 source URLs. Roughly half is a tour of ops from the public docs.",
+        "cuttable_pct": 45
+      }
+    ],
+    "findings": [
+      {
+        "file": "references/ops-jobs-and-graphs.md",
+        "line": 260,
+        "kind": "wrong",
+        "claim": "`dg launch --job my_job` is listed as 'Launch asynchronously via the instance run launcher'.",
+        "evidence": "Source, dagster_dg_cli/cli/launch.py:59-62 comment: 'right now... executes the selected assets in process using the dagster asset materialize command', and it calls `job_execute_command_impl`. Live run: `DAGSTER_HOME=... uv run dg launch --job hello_job` printed RUN_START, a multiprocess-executor ENGINE_EVENT, STEP_WORKER_STARTING and RUN_SUCCESS before returning; nothing was submitted to a launcher. SKILL.md:74 correctly says 'execute locally'. Conflict.",
+        "fix": "Say `dg launch` executes the job or assets synchronously in the CLI process, using the job's executor. It does not use the run launcher or daemon, so nothing appears as a queued or launched run on a remote deployment. Use the UI, GraphQL or `dagster job launch` for launcher-based runs.",
+        "verified": true
+      },
+      {
+        "file": "references/ops-jobs-and-graphs.md",
+        "line": 214,
+        "kind": "wrong",
+        "claim": "`dg scaffold defs dagster.job src/<project>/defs/jobs.py` scaffolds a job in the defs folder.",
+        "evidence": "In a scratch copy of the 1.13.28 probe project, `uv run dg scaffold defs dagster.job src/probe_proj/defs/jobs2.py` printed 'Creating defs at .../src/probe_proj/defs/src/probe_proj/defs/jobs2.py', a nested duplicate path. `dg scaffold defs dagster.job jobs.py` created defs/jobs.py. schedules-and-sensors.md uses the relative form.",
+        "fix": "Use the path relative to `defs/`: `dg scaffold defs dagster.job jobs.py`.",
+        "verified": true
+      },
+      {
+        "file": "references/ops-jobs-and-graphs.md",
+        "line": 254,
+        "kind": "wrong",
+        "claim": "'`config` and `partitions_def` are mutually exclusive on `@dg.job`.'",
+        "evidence": "`@dg.job(config={'ops': {}}, partitions_def=DailyPartitionsDefinition(...))` defines without error. `PartitionedConfig.from_flexible_config` turns a dict into a hardcoded per-partition run config; only a ConfigMapping raises ('Can't supply a ConfigMapping for config when partitions_def is supplied'). The decorator docstring says otherwise but the code allows it.",
+        "fix": "Say a dict `config` with `partitions_def` applies the same run config to every partition, a ConfigMapping with `partitions_def` raises, and `PartitionedConfig` must have a matching partitions def.",
+        "verified": true
+      },
+      {
+        "file": "references/ops-jobs-and-graphs.md",
+        "line": 381,
+        "kind": "misleading",
+        "claim": "'Graph-backed assets ... Subsetting requires `can_subset=True`.'",
+        "evidence": "`inspect.signature(dg.graph_asset)` has no `can_subset`; `@dg.graph_asset(can_subset=True)` raises `TypeError: graph_asset got an unexpected keyword argument 'can_subset'`. `graph_multi_asset(..., can_subset=True)` works, and `gma.can_subset` is True.",
+        "fix": "Scope the claim to `@dg.graph_multi_asset`. A single `@dg.graph_asset` cannot be subset.",
+        "verified": true
+      },
+      {
+        "file": "references/ops-jobs-and-graphs.md",
+        "line": 115,
+        "kind": "misleading",
+        "claim": "'`-> tuple[dg.Output[int], dg.Output[str]]` for multi-output ops'.",
+        "evidence": "An op annotated that way with no `out={...}` has one output named `result` (`m1.output_defs` is ['result']) and fails at run time with `DagsterTypeCheckDidNotPass: expected type Tuple[Int,String]... Value Output must be a int`. With `out={'a': dg.Out(), 'b': dg.Out()}` the same body succeeds.",
+        "fix": "State that the annotation only types the return; multiple outputs still need `out={...}`.",
+        "verified": true
+      },
+      {
+        "file": "references/declarative-automation.md",
+        "line": 299,
+        "kind": "misleading",
+        "claim": "`RecentPartitionsOnly` is documented as 'Only allow partitions whose key is on or after CUTOFF', but the example applies it as `eager() & ~RecentPartitionsOnly()`.",
+        "evidence": "Ran the exact class with StaticPartitions ['2024-06-01','2025-02-01'] (CUTOFF 2025-01-01), both upstream partitions materialized. `evaluate_automation_conditions` requested `{'2024-06-01'}`, the old partition and not the recent one. The negation inverts the stated intent; it was adapted from the docs' `~IsCompanyHoliday()` example.",
+        "fix": "Drop the `~` (`eager() & RecentPartitionsOnly()`), or rename the class so the negation reads correctly.",
+        "verified": true
+      },
+      {
+        "file": "references/declarative-automation.md",
+        "line": 55,
+        "kind": "misleading",
+        "claim": "The component YAML sets `on_cron('@daily')` on `sales_revenue_report` and also a `post_processing.assets` block with `eager()`, presented as a single working example.",
+        "evidence": "Built it as a PythonScriptComponent in a scratch project. `dg check defs` passed, but loaded specs show `sales_revenue_report -> eager` (label 'eager') and `other -> eager`. With no `target`, post_processing applies to every asset and overwrites the on_cron set on the declared asset.",
+        "fix": "Show the two forms separately, or add a `target:` to the post_processing entry, and note that post_processing overrides per-asset attributes.",
+        "verified": true
+      },
+      {
+        "file": "references/declarative-automation.md",
+        "line": 84,
+        "kind": "stale",
+        "claim": "The `on_cron`, `cron_tick_passed` and `all_deps_updated_since_cron` entries show only a cron string and never mention timezone.",
+        "evidence": "`inspect.signature(AutomationCondition.on_cron)` is `(cron_schedule, cron_timezone='UTC')`; same for `cron_tick_passed` and `all_deps_updated_since_cron`. A label printed `on_cron(@daily, UTC)`. An agent writing '9am' for a local-time pipeline silently gets 9am UTC.",
+        "fix": "Add one line that these default to UTC and take `cron_timezone='America/...'`. The NINE_AM recipe needs the timezone passed in both calls.",
+        "verified": true
+      },
+      {
+        "file": "references/schedules-and-sensors.md",
+        "line": 339,
+        "kind": "wrong",
+        "claim": "`build_schedule_context` and `build_sensor_context`: 'the instance, if given, must be persistent; `DagsterInstance.ephemeral()` raises ... same persistence rule.'",
+        "evidence": "On 1.13.28, `build_sensor_context(instance=DagsterInstance.ephemeral())` works, including `context.instance.get_run_records()` and an `@asset_sensor` run end to end against `dg.materialize([...], instance=i)`. `build_schedule_context(instance=ephemeral)` builds fine and only raises 'no instance reference was provided' when `context.instance` is accessed. The library docstring says it errors but the behavior differs.",
+        "fix": "Say a schedule context needs `dg.instance_for_test()` only if the schedule reads `context.instance`. Ephemeral instances work for sensor tests. Drop the blanket claim.",
+        "verified": true
+      },
+      {
+        "file": "references/schedules-and-sensors.md",
+        "line": 376,
+        "kind": "misleading",
+        "claim": "The legacy table lists `@dg.schedule(job=...)`/`job_name=` and `@dg.sensor(job=..., jobs=...)` as old, with `target=` as the replacement.",
+        "evidence": "No warning is emitted for `ScheduleDefinition(job=)`, `SensorDefinition(job=)` or `schedule(job=)` under `warnings.simplefilter('always')`; `target` docs say it 'will replace' them. `@dg.asset_sensor` and `@dg.multi_asset_sensor` have no `target` parameter at all, only `job`/`jobs`. The skill's own examples use `job=` (lines 142, 216, 300), which is internally inconsistent.",
+        "fix": "Present `target=` as preferred for schedules and `@sensor`, say `job=` is not deprecated, and note that asset and multi-asset sensors still take `job=`/`jobs=`.",
+        "verified": true
+      },
+      {
+        "file": "references/schedules-and-sensors.md",
+        "line": 245,
+        "kind": "misleading",
+        "claim": "'`@dg.multi_asset_sensor` is deprecated', with the legacy table adding 'removal no earlier than Dagster 2.0'.",
+        "evidence": "Declaring one emits `SupersessionWarning: Class MultiAssetSensorDefinition is superseded and its usage is discouraged`, not a DeprecationWarning. The docs page calls it deprecated. This is low severity because the behavior advice (prefer AutomationCondition) is right.",
+        "fix": "Say 'superseded/discouraged; no scheduled removal'.",
+        "verified": true
+      },
+      {
+        "file": "references/schedules-and-sensors.md",
+        "line": 269,
+        "kind": "stale",
+        "claim": "DagsterRunStatus values listed as QUEUED, NOT_STARTED, MANAGED, STARTING, STARTED, SUCCESS, FAILURE, CANCELING, CANCELED.",
+        "evidence": "`[s.name for s in dg.DagsterRunStatus]` returns QUEUED, NOT_STARTED, MANAGED, STARTING, STARTED, SUSPENDED, SUCCESS, FAILURE, CANCELING, CANCELED. SUSPENDED is missing. Minor, and the list restates common knowledge.",
+        "fix": "Delete the list, since `dg.DagsterRunStatus` is introspectable, or add SUSPENDED.",
+        "verified": true
+      },
+      {
+        "file": "references/schedules-and-sensors.md",
+        "line": 206,
+        "kind": "unverifiable",
+        "claim": "'keep additions and deletions under about 25k per evaluation' for `dynamic_partitions_requests`.",
+        "evidence": "Searched the installed 1.13.28 source and the dagster_docs.py pages (api/dagster/schedules-sensors, sensors, partitioning-assets) for 25,000/25k/25000: no match. The figure has no visible source.",
+        "fix": "Cite the source or drop the number. If kept, mark it as an unsourced rule of thumb.",
+        "verified": false
+      }
+    ],
+    "probes": [
+      {
+        "question": "I ran `uv run dg launch --job nightly_job` in a project that has a Dagster+ Hybrid deployment configured. Does it queue the run on the deployment's run launcher, and does the command return immediately?",
+        "answer": "No. In 1.13.28 `dg launch` runs the job (or asset materialization) synchronously in the local CLI process via `dagster job execute` / `asset materialize`, using the job's executor. It blocks until the run finishes and does not use the instance's run launcher or daemon. The CLI option is `--job`; `--jobs` is rejected.",
+        "wrong_answer_trap": "It submits the run asynchronously through the configured run launcher and returns immediately (this is what the docs, and ops-jobs-and-graphs.md:260, say).",
+        "source": "references/ops-jobs-and-graphs.md:260 (wrong; SKILL.md:74 is right)"
+      },
+      {
+        "question": "To create src/myproj/defs/jobs.py with the dg CLI scaffolder for an op job, which path argument do I pass to `dg scaffold defs dagster.job`?",
+        "answer": "Pass the path relative to the defs folder: `dg scaffold defs dagster.job jobs.py`. Passing `src/myproj/defs/jobs.py` creates a nested `defs/src/myproj/defs/jobs.py`.",
+        "wrong_answer_trap": "The full project-relative path `src/<project>/defs/jobs.py`.",
+        "source": "references/ops-jobs-and-graphs.md:214 (wrong); schedules-and-sensors.md:65,159 are right"
+      },
+      {
+        "question": "In Dagster 1.13 I have a daily partitioned job and a hand-written schedule. How do I compute 'the latest partition key as of this tick' for `RunRequest(partition_key=...)`, and what must I not pass?",
+        "answer": "Wrap the lookup in `with dg.partition_loading_context(effective_dt=context.scheduled_execution_time): key = partitions_def.get_last_partition_key()`. `get_last_partition_key()` takes no arguments in 1.13.28, and `current_time=` raises a TypeError.",
+        "wrong_answer_trap": "`partitions_def.get_last_partition_key(current_time=context.scheduled_execution_time)`, the older signature.",
+        "source": "references/schedules-and-sensors.md:148-153"
+      },
+      {
+        "question": "I have a `@dg.run_failure_sensor` in code location `alerts` that should also watch jobs in code location `analytics`. I set `monitored_jobs=[dg.CodeLocationSelector(location_name='analytics')]`. Will failures of jobs in `alerts` still trigger it?",
+        "answer": "No. Once `monitored_jobs` is set, same-location runs match only listed job definitions or selectors, so a list of only other locations' selectors stops watching the home location. Add `dg.CodeLocationSelector(location_name='alerts')` too. Setting both `monitored_jobs` and `monitor_all_code_locations=True` raises 'Cannot specify both'.",
+        "wrong_answer_trap": "The selectors add to the default own-location monitoring, so `alerts` is still covered.",
+        "source": "references/schedules-and-sensors.md:273-289"
+      },
+      {
+        "question": "I want a downstream asset to materialize only after all three of its upstream assets have updated each cycle. Which built-in AutomationCondition do I use, and which one is the common wrong choice?",
+        "answer": "Use `AutomationCondition.on_cron(cron)`; its cron tick acts as a synchronization barrier and it requires every upstream to update within the tick. `eager()` fires when any dependency updates. Do not hand-build 'all_deps_match(newly_updated().since(...))', which has no barrier and can desynchronize indefinitely. `on_cron` also defaults to UTC unless `cron_timezone` is passed.",
+        "wrong_answer_trap": "`eager()` (it triggers on any upstream), or a custom `all_deps_match(newly_updated())` condition.",
+        "source": "references/declarative-automation.md:84-87,392,415"
+      },
+      {
+        "question": "I subclassed `dg.AutomationCondition` with a custom `evaluate()` and attached it to an asset. It never evaluates, or errors in the daemon. What do I have to add, and what are the limits?",
+        "answer": "Custom Python conditions only evaluate on a sensor with `use_user_code_server=True` (e.g. `AutomationConditionSensorDefinition(name, target=..., use_user_code_server=True)`), since the daemon can't import user code. That sensor is capped at 500 assets/checks, is beta, and cannot target asset jobs. `default_condition` is only valid with `use_user_code_server=True`.",
+        "wrong_answer_trap": "The default_automation_condition_sensor evaluates custom conditions automatically once toggled on, or a plain @dg.sensor can evaluate them.",
+        "source": "references/declarative-automation.md:304,359-360"
+      },
+      {
+        "question": "Using Dagster 1.13 declarative automation with `eager()` on a daily-partitioned asset, 30 historical partitions are missing. How many partitions does eager request, and how do I make it cover older ones?",
+        "answer": "Only the latest time partition, because eager/on_cron/on_missing all start with `in_latest_time_window()`. To widen, `.without(AutomationCondition.in_latest_time_window())` or `.replace(in_latest_time_window(), in_latest_time_window(timedelta(days=N)))` (string-label replace also works). Static and dynamic partitions are not limited to the latest.",
+        "wrong_answer_trap": "It requests all missing partitions (a backfill), or the fix is a backfill policy.",
+        "source": "references/declarative-automation.md:86,457,184-191"
+      },
+      {
+        "question": "An op is annotated `-> tuple[dg.Output[int], dg.Output[str]]` and returns `dg.Output(1), dg.Output('a')`. Why does the job fail with a type check error, and what do I change?",
+        "answer": "Without `out={'a': dg.Out(), 'b': dg.Out()}` the op has a single output `result` typed as a tuple, so each Output object fails the int/str type check (`DagsterTypeCheckDidNotPass`). The return annotation does not create multiple outputs; declare `out={...}`. With `out` declared the same body works.",
+        "wrong_answer_trap": "The tuple-of-Output annotation alone declares two outputs.",
+        "source": "references/ops-jobs-and-graphs.md:62,115"
+      },
+      {
+        "question": "A graph op is decorated with `retry_policy=RetryPolicy(max_retries=3)` and raises `dg.Failure('bad input', allow_retries=False)`. How many times does the op body run, and how many with a plain `dg.Failure('bad input')`?",
+        "answer": "Once with `allow_retries=False` (it bypasses the RetryPolicy). With a plain `dg.Failure` the policy applies: 4 total executions (1 + 3 retries). Verified on 1.13.28. Retry precedence is invocation `with_retry_policy` over op definition over the job's `op_retry_policy`.",
+        "wrong_answer_trap": "Failure never retries, or Failure always honors the RetryPolicy regardless of `allow_retries`.",
+        "source": "references/ops-jobs-and-graphs.md:117,324"
+      }
+    ]
+  },
+  {
+    "group": [
+      "resources-and-config.md",
+      "testing-and-asset-checks.md",
+      "troubleshooting.md"
+    ],
+    "files": [
+      {
+        "file": "references/resources-and-config.md",
+        "value": "high",
+        "cache_worthy": "EnvVar timing (passes validate_loadable when unset, fails at run/tick planning with DagsterInvalidConfigError, empty string counts as set; no default arg); legacy ResourceDefinition(resource_fn=...) gets no lifecycle hooks; ConfigurableResourceFactory and dg.Resource are not exported in 1.13 (use ConfigurableResource[T] + create_resource + ResourceParam[T]); only 3 hooks ever called, setup/teardown per process; enum-by-name and discriminated-union-nested YAML shapes; RunConfig first positional arg is ops (asset config keyed by asset name); nested-resource EnvVar pitfall; config key must equal param name. All verified true in 1.13.28.",
+        "restates": "Basic ConfigurableResource definition, wiring snippet, nested-resource example, testing-by-construction, pydantic Field/default/Optional/list/dict basics, Launchpad/UI navigation, most of the legacy table, and the 14 Sources links. The Config field table is mostly pydantic knowledge.",
+        "cuttable_pct": 30
+      },
+      {
+        "file": "references/testing-and-asset-checks.md",
+        "value": "medium",
+        "cache_worthy": "materialize vs materialize_to_memory vs execute_in_process IO-manager behavior and the explicit-io_manager DagsterInvariantViolationError; upstream-must-be-listed unless deps=; AssetSelection.assets(x) auto-includes checks and .without_checks() decouples them; blocking=True gates only on ERROR-severity failure (WARN does not block, DagsterAssetCheckFailedError fails the step); new FreshnessPolicy needs `freshness: enabled: True` in dagster.yaml, FreshnessPolicy name reused and old one is LegacyFreshnessPolicy; evaluate_automation_conditions cursor threading; ComponentTree.for_project and create_defs_folder_sandbox test entry points; no asset_key param on build_asset_context.",
+        "restates": "Direct-invocation basics, mock.Mock usage, partitioned-config test, data-contract walkthrough (copied from docs), asset check decorator parameter lists (derivable from help()/signature), subsetting recipe, freshness-check legacy section, selection-helper lists, and the 18 Sources links.",
+        "cuttable_pct": 35
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "value": "medium",
+        "cache_worthy": "Items a model would get wrong: DG_PROJECT_PYTHON_EXECUTABLE read only from project-root .env; free_slots_after_run_end_seconds for cancelled-run pool deadlock; FROM_FAILURE needs a cross-run-readable IO manager; sensor timeout remedy order; default sensor created but STOPPED; execute_in_process always forces in_process_executor; tolerations/nodeSelector go under podSpecConfig; run_key plus cursor reset caveat; DST behavior. Much of the Dagster+/K8s/Hybrid material is docs-only and not testable here.",
+        "restates": "Large parts mirror docs troubleshooting pages verbatim: GHCR pull secrets, Postgres VACUUM/pg_repack advice, py-spy usage, GitHub Actions runner tables, TCP keepalive, PagerDuty batching, the error-class cheat sheet (class docstrings), and 30+ Sources links. Several entries are UI click-paths an agent cannot use and omit CLI equivalents (dg api ... get-ticks/get-logs).",
+        "cuttable_pct": 35
+      }
+    ],
+    "findings": [
+      {
+        "file": "references/resources-and-config.md",
+        "line": 295,
+        "kind": "wrong",
+        "claim": "`person_first_name: str | None = ...` is listed as 'Optional type but still required'.",
+        "evidence": "In 1.13.28 (pydantic 2.14.2) `class C3(dg.Config): first: str | None = ...` then `C3()` returns `first=None`; materialize with no config for it succeeds. Pure pydantic BaseModel with the same annotation does raise ValidationError. Dagster Config overrides Optional+Ellipsis to default None. (The docs page says it errors; it does not.)",
+        "fix": "Remove the row or state that Ellipsis does not make Optional fields required on dg.Config in 1.13; to require a value, use a non-Optional type (`str`) and, if None must be allowed, a validator.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 46,
+        "kind": "wrong",
+        "claim": "`uv sync` does *not* reinstall your own package; `uv pip install -e .` does (also line 405 for the registry_modules entry point).",
+        "evidence": "uv 0.13.6: added `[project.entry-points.\"dagster_dg_cli.registry_modules\"]` to a copy of the probe pyproject, ran `uv sync`: output 'Uninstalled 1 package / Installed 1 package ~ probe-proj==0.1.0', and the dist-info entry_points.txt then contained `[dagster_dg_cli.registry_modules] probe_proj = probe_proj.components`. `uv run` also rebuilt the project.",
+        "fix": "Say `uv sync` (or any `uv run`) reinstalls the project when pyproject.toml changes; if the package is genuinely absent, check the venv dg resolved (`.venv`, DG_PROJECT_PYTHON_EXECUTABLE, --use-active-venv). Drop the `uv pip install -e .` prescription.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 67,
+        "kind": "wrong",
+        "claim": "Table row 'Dependency on a key nothing produces: a typo in `deps=[...]`' triggers DagsterInvalidDefinitionError from `dg check defs`.",
+        "evidence": "`@dg.asset(deps=[\"nothing_makes_this\"]) def b()`; `Definitions.validate_loadable(Definitions(assets=[b]))` passes and the asset graph contains `nothing_makes_this` as an auto-created stub (`is_external=True`, `is_materializable=False`). Only a function-parameter dependency (`def down(typo_upstream)`) raises 'Input asset ... is not produced by any of the provided asset ops'.",
+        "fix": "Split the row: a typo in a parameter name errors; a typo in `deps=` silently creates an external stub upstream, so check `dg list defs` for unexpected external keys and note that `dg check defs` will not catch it.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 310,
+        "kind": "stale",
+        "claim": "Migrating from AutoMaterializePolicy requires `use_sensors: true` in the `auto_materialize` config (also the legacy table at line 440: 'migration needs `use_sensors: true`').",
+        "evidence": "dagster/_core/instance/methods/settings_methods.py:188 `return self.get_settings(\"auto_materialize\").get(\"use_sensors\", True)` so it defaults to True in 1.13.28. Only a config that explicitly sets `use_sensors: false` disables it.",
+        "fix": "Reword: check dagster.yaml for an explicit `auto_materialize.use_sensors: false` left over from the old setup; nothing needs adding by default.",
+        "verified": true
+      },
+      {
+        "file": "references/testing-and-asset-checks.md",
+        "line": 417,
+        "kind": "stale",
+        "claim": "`Definitions.get_job_def` 'currently falls back ... after 1.11 it raises instead if the job was not passed in directly.'",
+        "evidence": "1.13.28 is past 1.11 and still falls back: a job reachable only via a ScheduleDefinition returns fine with `UserWarning: Found job named aj passed to schedule ... Starting in dagster 1.11, you must call Definitions.resolve_job_def`. `Definitions.resolve_job_def` exists and resolves UnresolvedAssetJobDefinition (verified: `d.resolve_job_def('tj').execute_in_process(...)` ran). The docstring still says 'After dagster 1.11 ... will throw'.",
+        "fix": "Tell agents to use `defs.resolve_job_def(name)` for asset jobs and jobs attached to schedules/sensors, and that `get_job_def` still works in 1.13 but warns and is slated to raise.",
+        "verified": true
+      },
+      {
+        "file": "references/testing-and-asset-checks.md",
+        "line": 280,
+        "kind": "misleading",
+        "claim": "'if no result is emitted for the check, downstream execution proceeds and a warning is logged' (repeated in Gotchas line 415).",
+        "evidence": "A single `@dg.asset_check(blocking=True)` that yields nothing and a `@dg.multi_asset_check` that omits one spec's result both fail their step with `DagsterStepOutputNotFoundError: ... did not return an output for non-optional output` (materialize raise_on_error=False -> success False; downstream `after` not run). The warn-and-proceed path (dagster/_core/execution/plan/active.py:236 'emitted no result ... will proceed without gating') applies only when the check output is optional, e.g. a check not selected under can_subset.",
+        "fix": "Say a normal check that fails to emit a result errors the step; warn-and-proceed happens only for unselected/optional (subsettable) checks. Add that WARN severity never blocks and a failing ERROR blocking check raises DagsterAssetCheckFailedError under raise_on_error=True.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 145,
+        "kind": "misleading",
+        "claim": "DagsterUnknownResourceError entry: 'With Pythonic resources the parameter name must match the key in Definitions(resources={...})' as the fix for that error.",
+        "evidence": "Pythonic mismatch (`def a(my_conn: R)` with resources={'other': R()}): `Definitions(...)` constructs fine; `validate_loadable` / `materialize` raise `DagsterInvalidDefinitionError: resource with key 'my_conn' required by op 'a' was not provided`. DagsterUnknownResourceError only occurs for legacy `context.resources.foo` without required_resource_keys.",
+        "fix": "Point Pythonic key mismatches to the DagsterInvalidDefinitionError row (which already lists it) and keep DagsterUnknownResourceError for `context.resources.X` access on legacy-style resources.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 78,
+        "kind": "misleading",
+        "claim": "DagsterInvariantViolationError causes include `load_from_defs_folder(path_within_project=...)` outside the project and the deprecated `project_root=` keyword.",
+        "evidence": "`load_from_defs_folder(path_within_project=Path('/tmp'))` raises `DagsterError: Could not find config file (pyproject.toml/dg.toml) in /tmp or any parent`, not InvariantViolation. `project_root=` only emits a deprecation warning and works. The two real InvariantViolation causes reproduced via `dg check defs`: 'Cannot have more than one Definitions object defined at module scope' and 'No Definitions, RepositoryDefinition, Job, ... found in \"probe_proj.definitions\"'.",
+        "fix": "List the two verified causes (multiple module-level Definitions; none/non-Definitions found) and move the path-outside-project case to a separate DagsterError note; drop project_root as a cause.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 32,
+        "kind": "misleading",
+        "claim": "'`dg check defs --check-yaml` does both checks in one pass' and the 60-second sequence runs `dg check yaml` before `dg check defs`.",
+        "evidence": "dagster_dg_cli/cli/check.py: `--check-yaml/--no-check-yaml` defaults to None, then `check_yaml = dg_context.is_project`, so inside a project `dg check defs` already schema-checks YAML; passing `--check-yaml` in a workspace context calls exit_with_error('--check-yaml is not currently supported in a workspace context'). `dg check defs --help` text matches. testing-and-asset-checks.md:181 states the correct default.",
+        "fix": "Say YAML checking is on by default inside a project (`--no-check-yaml` to skip); do not suggest passing `--check-yaml` from a workspace root. Keep standalone `dg check yaml` only for the fast no-load loop.",
+        "verified": true
+      },
+      {
+        "file": "references/testing-and-asset-checks.md",
+        "line": 102,
+        "kind": "misleading",
+        "claim": "Parameter lists for materialize/materialize_to_memory/execute_in_process, and the Gotcha 'execute_in_process defaults to raise_on_error=True' as if unique.",
+        "evidence": "inspect.signature in 1.13.28: `materialize` and `materialize_to_memory` both take `raise_on_error: bool = True`; `execute_in_process` also takes `asset_selection`, `run_id`, `tags` (the skill's own example at line 135 uses `asset_selection=` though the list at line 102 omits it). `dg.materialize([boom])` raises ValueError; `raise_on_error=False` returns success False.",
+        "fix": "Add `raise_on_error` to the materialize family list (and Gotcha), add `asset_selection` to execute_in_process; or replace the exhaustive lists with 'see inspect.signature'.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 72,
+        "kind": "misleading",
+        "claim": "'Invalid asset name: `@asset` names must be valid Python identifiers. Use `key=` / `key_prefix=` for other characters.'",
+        "evidence": "`@dg.asset(name='my-asset')`, `name='1abc'`, `name='a.b'` all construct fine; `name='with space'` fails, and `dg.asset(key='c d')` also fails with 'Names must be in regex ^[A-Za-z0-9_]+$' (op name derived from key), so key= does not bypass the restriction.",
+        "fix": "State the actual rule (letters, digits, underscore after sanitization of `-` and `.`; spaces and other punctuation rejected) and that key segments with spaces still fail via the derived op name.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 140,
+        "kind": "misleading",
+        "claim": "DagsterInvalidSubsetError is what an agent will see for a partial multi-asset selection with can_subset=False or an empty selection.",
+        "evidence": "`dg.materialize([m], selection=['m1'])` and `Definitions.validate_loadable` with a job selecting one asset of a non-subsettable multi-asset surface as `DagsterInvalidDefinitionError: Failed to resolve asset job ...`; DagsterInvalidSubsetError is the `__cause__` (message: 'This AssetsDefinition does not support subsetting').",
+        "fix": "Note that the top-level error is DagsterInvalidDefinitionError 'Failed to resolve asset job' and the Subset error is in the cause chain, so agents grep for 'does not support subsetting'.",
+        "verified": true
+      },
+      {
+        "file": "references/troubleshooting.md",
+        "line": 3,
+        "kind": "unverifiable",
+        "claim": "Dagster+ and UI-only diagnostics (daemon status, Deployment > Daemons, Next tick, Redeploy) are the primary instructions; no CLI path is given for agents that cannot use the UI.",
+        "evidence": "`dg api run get-logs`, `dg api run get-events`, `dg api sensor get-ticks`, `dg api schedule get-ticks` exist in 1.13.28 (dg api --help: 'Make REST-like API calls to Dagster Plus'); grep of references/ shows troubleshooting.md never mentions them.",
+        "fix": "Add one line per automation/run entry with the read-only `dg api ... --json` equivalent for Dagster+ and `dagster instance info`/daemon logs for OSS.",
+        "verified": true
+      }
+    ],
+    "probes": [
+      {
+        "question": "A Dagster 1.13 resource has `password: str` bound to `dg.EnvVar(\"DB_PASSWORD\")` in `Definitions(resources=...)`, and DB_PASSWORD is not set in the shell. Does `dg check defs` fail? When and how does the failure first appear, and what happens if DB_PASSWORD is set to an empty string?",
+        "answer": "`dg check defs` and `Definitions.validate_loadable` pass (EnvVar resolves only when a run's or tick's config is processed). The first run/tick fails (DagsterInvalidConfigError post-processing error: 'You have attempted to fetch the environment variable \"DB_PASSWORD\" which is not set'), possibly at execution planning. An empty string counts as set and initializes the resource with ''; validate non-empty yourself (e.g. pydantic Field(min_length=1) fails at resource init).",
+        "wrong_answer_trap": "Assuming dg check defs catches the missing variable at load time (like os.getenv), or that an empty value is treated as missing.",
+        "source": "references/resources-and-config.md:252"
+      },
+      {
+        "question": "In Dagster 1.13 I have a `ConfigurableResource` with `setup_for_execution` and `teardown_after_execution`, but I register it as `dg.ResourceDefinition(resource_fn=lambda ctx: MyResource(...))`. Do the lifecycle hooks run? What other method names does Dagster call for cleanup?",
+        "answer": "No: an instance returned from a legacy ResourceDefinition(resource_fn=...) is a plain value, so neither setup_for_execution nor teardown_after_execution runs. Bind the ConfigurableResource directly (Definitions resources, nested field, materialize, build_resources). Only setup_for_execution, teardown_after_execution and yield_for_execution are ever called; teardown()/close() are never invoked.",
+        "wrong_answer_trap": "Assuming hooks fire for any ConfigurableResource regardless of how it is registered, or that a method named teardown()/close() will be called.",
+        "source": "references/resources-and-config.md:108"
+      },
+      {
+        "question": "Writing a pytest for a downstream asset `def down(up): ...` in Dagster 1.13: what is wrong with `dg.materialize_to_memory([down], resources={\"io_manager\": dg.FilesystemIOManager(...)})`, and what changes if `down` instead declares `deps=[up]`?",
+        "answer": "Two problems: passing an explicit IO manager to materialize_to_memory raises DagsterInvariantViolationError (it forces mem_io_manager); and with a parameter dependency the upstream asset definition must be in the list or you get DagsterInvalidDefinitionError 'Input asset ... is not produced by any of the provided asset ops'. With `deps=[up]` the upstream need not be listed.",
+        "wrong_answer_trap": "Believing materialize_to_memory accepts an io_manager override, or that listing only the asset under test is enough for parameter-based dependencies.",
+        "source": "references/testing-and-asset-checks.md:125"
+      },
+      {
+        "question": "An `@dg.asset_check(asset=orders, blocking=True)` returns `AssetCheckResult(passed=False)`; another returns `passed=False, severity=WARN`. In a job that also materializes a downstream asset of `orders`, what runs and what does `dg.materialize(...)` do with default arguments?",
+        "answer": "ERROR-severity (default) failure: the check step fails with DagsterAssetCheckFailedError ('1 blocking asset check failed with ERROR severity'), downstream assets do not execute, and dg.materialize raises that error because raise_on_error=True by default (use raise_on_error=False to inspect). WARN severity never blocks: downstream runs and the run succeeds.",
+        "wrong_answer_trap": "Thinking any failed blocking check stops downstream regardless of severity, or that a check failure only flags the UI and downstream still runs.",
+        "source": "references/testing-and-asset-checks.md:280"
+      },
+      {
+        "question": "I define `asset_job = dg.define_asset_job(\"j\", dg.AssetSelection.assets(orders))` and want a job that materializes `orders` only, with its asset checks on a separate schedule. How do I do that in Dagster 1.13?",
+        "answer": "`AssetSelection.assets(orders)` automatically includes checks attached to those assets (and `dg launch --assets orders` runs them too). Use `.without_checks()` on the selection for the asset job and `dg.AssetSelection.checks_for_assets(orders)` for a separate check job, each with its own ScheduleDefinition.",
+        "wrong_answer_trap": "Assuming a selection of assets excludes checks and that checks must be explicitly added to run alongside the asset.",
+        "source": "references/testing-and-asset-checks.md:290"
+      },
+      {
+        "question": "I want to use the new Dagster 1.12+ FreshnessPolicy.time_window(fail_window=timedelta(hours=24)) on an asset in a local OSS project. What extra setup is needed, do I need a sensor or schedule, and what happened to the old FreshnessPolicy class?",
+        "answer": "Freshness policies are preview and off by default: add `freshness:\\n  enabled: True` to dagster.yaml (instance config key defaults to disabled). No sensor or schedule is required, unlike build_last_update_freshness_checks. The pre-1.6 class was renamed LegacyFreshnessPolicy; the name FreshnessPolicy now refers to the new API (time_window with fail_window >= 60s and warn_window < fail_window, or cron).",
+        "wrong_answer_trap": "Using FreshnessPolicy(maximum_lag_minutes=...) legacy kwargs or build_last_update_freshness_checks plus a sensor, or assuming policies work without enabling the instance flag.",
+        "source": "references/testing-and-asset-checks.md:325"
+      },
+      {
+        "question": "I need a resource that wraps a foreign client class (e.g. `GitHub(token)`) with a config field, and an asset that receives the built client. Which base class and annotation do I use in Dagster 1.13 given the docs mention `ConfigurableResourceFactory` and `dg.Resource[T]`?",
+        "answer": "Subclass `dg.ConfigurableResource[GitHub]` and implement `create_resource(self, context) -> GitHub`; annotate the asset parameter `dg.ResourceParam[GitHub]`. `dg.ConfigurableResourceFactory` and `dg.Resource` are not exported from dagster in 1.13.28 (hasattr returns False), even though some docs pages use those names.",
+        "wrong_answer_trap": "Writing `class X(dg.ConfigurableResourceFactory[T])` and `dg.Resource[T]` from the docs page, which raise AttributeError on import/use.",
+        "source": "references/resources-and-config.md:215"
+      },
+      {
+        "question": "In run-config YAML for an asset whose Config has an `enum.Enum` field and a pydantic discriminated union (`pet: Cat | Dog = Field(discriminator='pet_type')`), how are the enum value and the union written, and what happens with unknown keys?",
+        "answer": "Enums are written by member name (`Bob: GUEST`, not the value `guest`; the value form raises DagsterInvalidConfigError). A discriminated union nests under the discriminator value (`pet: {cat: {meows: 10}}`; the flat `{pet_type: cat, meows: 10}` form fails). Unknown keys fail with DagsterInvalidConfigError unless the model subclasses dg.PermissiveConfig. Asset config lives under `ops: {<asset_name>: {config: ...}}` and dg.RunConfig's first positional argument is `ops`.",
+        "wrong_answer_trap": "Writing the enum's value and the flat pydantic-style union form, or expecting extra keys to be silently ignored.",
+        "source": "references/resources-and-config.md:303"
+      },
+      {
+        "question": "I changed `[tool.dg.project]` settings and need `dg` to use a non-default virtualenv, e.g. `../.venvs/my-project`. Where must I set `DG_PROJECT_PYTHON_EXECUTABLE` for it to take effect, and does exporting it in my shell work?",
+        "answer": "It must be in the project-root `.env` file (relative paths resolve against the project root). dg reads it via dotenv_values on `<project_root>/.env` only (dagster_dg_core/context.py project_python_executable); exporting it in the shell has no effect. Default is `<project_root>/.venv`, and `--use-active-venv` is the alternative.",
+        "wrong_answer_trap": "Exporting the variable in the shell or setting it in pyproject.toml.",
+        "source": "references/troubleshooting.md:51"
+      }
+    ]
+  },
+  {
+    "group": [
+      "operations-and-debugging.md",
+      "deployment-oss.md",
+      "pipes-external-execution.md"
+    ],
+    "files": [
+      {
+        "file": "references/operations-and-debugging.md",
+        "value": "high",
+        "cache_worthy": "The three-layer coordinator/launcher/executor split. Pools are unlimited until a limit is set (verified in instance_concurrency_context.claim). Cancelled runs hold pool slots unless run_monitoring.free_slots_after_run_end_seconds is set (verified: the check lives in MonitoringDaemon). max_concurrent_runs: 0 halts launching. dagster/priority is a string. Retry tags and retry_on_asset_or_op_failure semantics, and FROM_ASSET_FAILURE. Resume only works with some launcher/executor pairs. Slow-import timeout of 180s. Per-job tags like dagster/max_runtime need monitoring enabled and a daemon restart.",
+        "restates": "Webserver/daemon flag lists (--help), the Webserver and UI nav tour, logging.config handler boilerplate, py-spy/pdb recipes, the Kafka/Lambda/asset-health pattern bullets, the legacy table rows, a 23-line Sources list, and most of the dagster.yaml key table (the docs and `dagster instance info` carry it).",
+        "cuttable_pct": 35
+      },
+      {
+        "file": "references/deployment-oss.md",
+        "value": "medium",
+        "cache_worthy": "Sensor/schedule code runs in the code server, so EnvVar values must be set on the code-server container, not the daemon. The code-server image needs CMD, not ENTRYPOINT. DAGSTER_CURRENT_IMAGE. The job-level dagster-k8s/config tag does not reach step pods. Tags are silently ignored by the wrong launcher. The Helm key renames. Instance migration is needed on minor version bumps. The GKE Autopilot fix.",
+        "restates": "The Docker Compose excerpt, the Helm install/values walkthrough, ECS and GCP yaml, the single-machine section, the production checklist (mostly restates ops file), the CI/CD steps and a 25-line Sources list. All are close paraphrases of the deployment docs. Several hedges (code-server flag provenance, `unverified` uv Dockerfile) cost tokens and add no behavior change.",
+        "cuttable_pct": 45
+      },
+      {
+        "file": "references/pipes-external-execution.md",
+        "value": "medium",
+        "cache_worthy": "Pipes assets cannot use IO managers. report_asset_materialization may be called once per key. open_dagster_pipes returns a MagicMock outside Dagster. get_results synthesizes implicit materializations. Which accessor pairs with which asset shape. The Spark transport recipe (CLI args plus S3 reader/writer plus include_stdio_in_messages). Serverless Databricks needs its own client. Raw env-var protocol for non-Python code. The metadata table_schema and lineage shapes would be high-value, but both are wrong as written.",
+        "restates": "The 14-row client table and both injector/reader/loader/writer tables (API reference), the PipesSession member table, the multi-asset/check snippets, the legacy step-launcher paragraph and an 28-line Sources list.",
+        "cuttable_pct": 35
+      }
+    ],
+    "findings": [
+      {
+        "file": "references/operations-and-debugging.md",
+        "line": 52,
+        "kind": "wrong",
+        "claim": "`run_coordinator` is shown as `DefaultRunCoordinator` (immediate), the daemon table says the run queue is enabled only when `run_coordinator` is set to `QueuedRunCoordinator` (line 124), deployment-oss.md:351 says setting it is what makes the run-queue daemon run, and the legacy row (line 438) says old instances may need `run_queue` to enable queueing. In 1.13.28 the default coordinator is already `QueuedRunCoordinator` with `max_concurrent_runs` defaulting to 10 (-1 disables the limit, 0 halts launching).",
+        "evidence": "Built DagsterInstance.from_config on a dagster.yaml containing only `run_monitoring: {enabled: true}`. It returned QueuedRunCoordinator with RunQueueConfig(max_concurrent_runs=10), and get_required_daemon_types() included QUEUED_RUN_COORDINATOR. Source: dagster/_core/instance/ref.py:319 defaults run_coordinator to QueuedRunCoordinator. queued_run_coordinator.py:195 says 'Defaults to 10. Set to -1 to disable the limit. Set to 0 to stop any runs'. The docs page run-coordinators still says Default needs no configuration, which is stale.",
+        "fix": "State that the default is QueuedRunCoordinator, max_concurrent_runs 10, -1 disables the limit, and runs beyond the limit sit in QUEUED. DefaultRunCoordinator is an explicit opt-out. Reword the daemon-table 'Enabled by' cell, the production-checklist bullet (deployment-oss.md:351) and the legacy `run_queue` row. Add that `run_queue:` and `run_coordinator:` together raise a config error, as do the same limit fields set in both `concurrency.runs` and `run_coordinator.config`.",
+        "verified": true
+      },
+      {
+        "file": "references/pipes-external-execution.md",
+        "line": 138,
+        "kind": "wrong",
+        "claim": "`table_schema` is given as a bare list of column dicts (also in the example at line 147), and `table_column_lineage` as `{\"table_column_lineage\": {col: [{\"asset_key\":..., \"column\":...}]}}`. Both are wrong in 1.13.28. `table_schema` needs `{\"columns\": [...]}`, and lineage needs `{\"deps_by_column\": {col: [{\"asset_key\":..., \"column_name\":...}]}}`. The docs page shows the same wrong shapes.",
+        "evidence": "external_metadata.py metadata_value_from_external calls check.mapping_param(value) then reads value['columns'], and for lineage reads value['deps_by_column'] and builds TableColumnDep(**dep). Direct calls: list raised ParameterCheckError; `column` raised `TableColumnDep.__new__() got an unexpected keyword argument 'column'`; `{'columns': [...]}` returned TableSchemaMetadataValue. End-to-end with PipesSubprocessClient: the list form leaves run success=True with metadata {} (traceback only in stderr from the reader thread); the columns form materializes the schema.",
+        "fix": "Table-schema row: raw_value is `{\"columns\": [column dicts]}`. Lineage row: `{\"deps_by_column\": {\"<col>\": [{\"asset_key\": ..., \"column_name\": ...}]}}`. Fix the example. Add that a bad shape drops metadata silently while the step still succeeds. Also list the `dagster_run`, `asset` and `null` types.",
+        "verified": true
+      },
+      {
+        "file": "references/operations-and-debugging.md",
+        "line": 46,
+        "kind": "wrong",
+        "claim": "'Every scalar accepts `{env: VAR_NAME}` in place of a literal.' Most dagster.yaml scalars reject it and the instance fails to load. deployment-oss.md:353 repeats the claim.",
+        "evidence": "Tested from_config on temp dagster.yaml files. FAIL with 'Invalid scalar at path': run_retries.max_retries, run_retries.enabled, run_monitoring.enabled, run_monitoring.max_runtime_seconds, concurrency.runs.max_concurrent_runs, concurrency.pools.default_limit (`not a int`), code_servers.local_startup_timeout, sensors.num_workers, telemetry.enabled, retention.schedule.purge_after_days, python_logs.python_log_level. OK: run_coordinator.config.max_concurrent_runs / dequeue_use_threads / dequeue_num_workers, run_queue.max_concurrent_runs, auto_materialize.enabled. Config schemas use plain int/bool (config.py:543-580) instead of IntSource/BoolSource.",
+        "fix": "Replace with: env substitution works only for source-typed fields (storage connection strings and ports, compute-log manager config, run_coordinator config, auto_materialize); plain int/bool fields such as run_retries, run_monitoring, concurrency, retention, sensors/schedules and python_logs take literals only. When in doubt, test by loading the instance.",
+        "verified": true
+      },
+      {
+        "file": "references/deployment-oss.md",
+        "line": 404,
+        "kind": "wrong",
+        "claim": "'`DAGSTER_HOME` must exist. A missing directory falls back to ephemeral storage, and history vanishes on restart.' In 1.13.28 a set-but-nonexistent DAGSTER_HOME raises instead.",
+        "evidence": "`DAGSTER_HOME=<nonexistent> DagsterInstance.get()` raised DagsterInvariantViolationError: '$DAGSTER_HOME ... is not a directory or does not exist. Dagster requires this environment variable to be set to an existing directory' (factory.py:93). Unset DAGSTER_HOME is what gives the ephemeral temp instance.",
+        "fix": "Say a nonexistent DAGSTER_HOME makes the webserver/daemon/CLI fail to start with that error. Ephemeral instances come from leaving DAGSTER_HOME unset (the `dg dev` case).",
+        "verified": true
+      },
+      {
+        "file": "references/operations-and-debugging.md",
+        "line": 443,
+        "kind": "misleading",
+        "claim": "The legacy table maps `dagster job launch/execute` to `dg launch` (line 443), line 150 contrasts `job launch` (through the launcher) with `job execute` (in-process), and pipes-external-execution.md:106 and :378 say `dg launch --assets` 'runs one for real'. `dg launch` executes in the CLI process: it never goes through the run coordinator, queue or run launcher.",
+        "evidence": "dagster_dg_cli/cli/launch.py:56-62 comment: 'it only works in a project context in local dev/OSS, and executes the selected assets in process using the dagster asset materialize command'. It calls asset_materialize_command_impl / job_execute_command_impl. `dg launch --assets` ran the PythonScriptComponent asset locally to RUN_SUCCESS.",
+        "fix": "Map `dg launch` to `dagster asset materialize` / `dagster job execute` (local in-process). Keep `dagster job launch` as the way to go through the instance's launcher and queue. Do not list `job launch` as superseded.",
+        "verified": true
+      },
+      {
+        "file": "references/operations-and-debugging.md",
+        "line": 225,
+        "kind": "misleading",
+        "claim": "The run_monitoring example sets `max_resume_run_attempts: 3` ('>0 enables resuming crashed runs'). Copied onto an instance whose launcher cannot resume (including the default DefaultRunLauncher), it fails at instance load. The only caveat appears two bullets later.",
+        "evidence": "dagster.yaml `run_monitoring: {enabled: true, max_resume_run_attempts: 3}` with the default launcher raised CheckError: 'The configured run launcher does not support resuming runs. Set max_resume_run_attempts to 0 to use run monitoring' (settings_methods.py:_initialize_run_monitoring). Default is 0, which the key table gets right (line 57).",
+        "fix": "Use `max_resume_run_attempts: 0` in the generic block with a comment, or move `3` into a K8s/Docker-only example. Say the setting must stay 0 for launchers without resume support.",
+        "verified": true
+      },
+      {
+        "file": "references/pipes-external-execution.md",
+        "line": 311,
+        "kind": "internal-conflict",
+        "claim": "`get_bootstrap_env_vars()` values are described as 'JSON, gzipped, base64-encoded', while line 361 says the subprocess env vars are 'base64-encoded zlib-compressed JSON'. It is zlib for both env vars and CLI args. The 'gzipped' wording comes from a stale docstring.",
+        "evidence": "dagster_pipes encode_param uses zlib.compress, and decode_param uses zlib.decompress. I decoded the live DAGSTER_PIPES_CONTEXT env var with decode_param and got {'path': '.../context'}. The DAGSTER_PIPES_MESSAGES payload was {'path': ..., 'include_stdio_in_messages': False}. dagster/_core/pipes/context.py:315 docstring says gzip, which is wrong.",
+        "fix": "Change line 311 to 'JSON, zlib-compressed, base64-encoded' so non-Python implementers do not use gzip.",
+        "verified": true
+      },
+      {
+        "file": "references/operations-and-debugging.md",
+        "line": 118,
+        "kind": "misleading",
+        "claim": "The daemon list is described as the full set hosted by `dagster-daemon` (Scheduler, Sensor, Run queue, Run monitoring, Backfill), and deployment-oss.md:34 lists four. In 1.13.28 the daemon also runs ASSET (automation-condition sensors), FRESHNESS_DAEMON, and an event-log consumer daemon that exists only when `run_retries.enabled` is true.",
+        "evidence": "get_required_daemon_types() on a default instance returned ['SENSOR','BACKFILL','SCHEDULER','QUEUED_RUN_COORDINATOR','MONITORING','ASSET','FRESHNESS_DAEMON']. daemon_methods.py:92-98 adds EventLogConsumerDaemon when run_retries_enabled; auto_materialize.enabled and use_sensors default True. The Sensor row's 'including automation condition sensors' conflicts with the ASSET daemon evaluating them by default (use_user_code_server=False).",
+        "fix": "Add rows for the asset daemon (default automation-condition sensor), freshness, and the run-retry daemon (enabled by run_retries.enabled). Mark Run queue as on by default. Drop the 'including automation condition sensors' wording from the Sensor row.",
+        "verified": true
+      },
+      {
+        "file": "references/deployment-oss.md",
+        "line": 58,
+        "kind": "stale",
+        "claim": "Hedges that `dagster code-server start` is only documented with `-f`, that the `-m` form 'follows `dagster api grpc`', and that its flag list is not in the CLI reference. The command takes -m, -f, --package-name, -a, -d, --autoload-defs-module-name, -p/-s, --location-name, --container-image, --log-format, --startup-timeout, --heartbeat and falls back to DAGSTER_CURRENT_IMAGE.",
+        "evidence": "`dagster code-server start --help` lists all of those. Ran `dagster code-server start -h 127.0.0.1 -p 4991 -m probe_proj.definitions`, then `dagster api grpc-health-check -p 4991` printed 'gRPC connection successful' (rc 0). Source: dagster/_cli/code_server.py:231 container_image or os.getenv('DAGSTER_CURRENT_IMAGE').",
+        "fix": "Delete the provenance hedge. State the flags plainly. Note --startup-timeout (default none), distinct from the instance's code_servers.local_startup_timeout (180).",
+        "verified": true
+      },
+      {
+        "file": "references/deployment-oss.md",
+        "line": 369,
+        "kind": "stale",
+        "claim": "`dg scaffold build-artifacts` is presented as a current command that 'generates a build.yaml and Dockerfile'. In 1.13.28 it is a backward-compat shim whose help text points to `dg plus deploy configure [serverless|hybrid]`.",
+        "evidence": "dagster_dg_cli/cli/scaffold/build_artifacts.py docstring: 'Scaffolds a Dockerfile ... NOTE: This command is maintained for backward compatibility. Consider using `dg plus deploy configure [serverless|hybrid]`'; scaffold/__init__.py:23 comment '# Legacy shim'. `dg plus deploy configure --help` exists.",
+        "fix": "One sentence: the command is a legacy shim for Dagster+; OSS users write their own Dockerfile. Point Hybrid users to `dg plus deploy configure hybrid`.",
+        "verified": true
+      },
+      {
+        "file": "references/operations-and-debugging.md",
+        "line": 115,
+        "kind": "misleading",
+        "claim": "'`dagster-daemon run` ... takes the same code-location args as `dg dev`.' `dg dev` takes no -m/-f/-w code-location flags (it discovers the project or workspace). `dagster-daemon run` takes -m/-f/-w, --package-name, --grpc-* and so on.",
+        "evidence": "dagster_dg_cli/cli/dev.py click options are only --code-server-log-level, --log-level, --log-format, --port/-p, --host/-h, --live-data-poll-rate, --db-*, --check-yaml. `dagster-daemon run --help` lists -m, -f, -a, --package-name, --autoload-defs-module-name, --grpc-*.",
+        "fix": "Say it takes the `dagster` code-location flags (-m, -f, -w, ...), which match `dagster-webserver`'s.",
+        "verified": true
+      },
+      {
+        "file": "references/pipes-external-execution.md",
+        "line": 57,
+        "kind": "misleading",
+        "claim": "The quickstart launches the script with `shutil.which(\"python\")`. That resolves whatever `python` is on PATH, which may be neither the interpreter that has dagster-pipes installed nor present at all (None breaks the command list). `sys.executable` is what the verified run used.",
+        "evidence": "My runs used `[sys.executable, 'ext.py']` and succeeded. The `which` behavior is inferred (PATH under dagster-daemon/K8s run workers can differ from `uv run`).",
+        "fix": "Use `sys.executable` in the snippet and add that the external interpreter must have dagster-pipes installed.",
+        "verified": false
+      }
+    ],
+    "probes": [
+      {
+        "question": "I have a fresh Dagster 1.13.28 OSS deployment whose dagster.yaml sets only `storage:` (no run_coordinator section). A sensor fires 25 runs at once. Which run coordinator is in effect and how do the runs behave?",
+        "answer": "QueuedRunCoordinator is the default. Runs go to QUEUED and the daemon's run-queue daemon dequeues them, with at most max_concurrent_runs (default 10) in progress at once. -1 removes the limit, 0 halts launching. Without a running daemon the runs strand in QUEUED. DefaultRunCoordinator applies only if configured explicitly.",
+        "wrong_answer_trap": "DefaultRunCoordinator launches all 25 immediately with no queue or limit, and queueing needs `run_coordinator: QueuedRunCoordinator` or `run_queue:` configured first.",
+        "source": "operations-and-debugging.md:52,124 (skill is wrong here; verified against ref.py:319 and a loaded instance)"
+      },
+      {
+        "question": "A Pipes external script calls `context.report_asset_materialization(metadata={'schema': {'type': 'table_schema', 'raw_value': [{'name': 'id', 'type': 'int'}]}})` in 1.13.28. What happens, and what should raw_value be?",
+        "answer": "The orchestration side rejects the list (ParameterCheckError: 'table_schema_value' not a Mapping) in the message-handler thread. The traceback goes to stderr, the step still succeeds, and the metadata is silently dropped. raw_value must be `{'columns': [{'name':..., 'type':...}]}`. Likewise table_column_lineage needs `{'deps_by_column': {col: [{'asset_key':..., 'column_name':...}]}}`.",
+        "wrong_answer_trap": "A bare list of column dicts works (as the docs show), or the step fails loudly. Lineage keyed by `table_column_lineage` with `column`.",
+        "source": "pipes-external-execution.md:138,147 (skill is wrong; verified by running a PipesSubprocessClient asset)"
+      },
+      {
+        "question": "I want `concurrency.runs.max_concurrent_runs` and `run_retries.max_retries` in dagster.yaml to come from environment variables via `{env: NAME}`. Will that load?",
+        "answer": "No for those fields: concurrency.runs.*, concurrency.pools.default_limit, run_retries.*, run_monitoring.*, code_servers.*, sensors/schedules threading, telemetry, retention and python_logs are plain int/bool/str and fail instance load with 'Invalid scalar'. `{env:}` works only for source-typed fields (run_coordinator config values, storage connection fields, compute-log manager config, auto_materialize). Set literals or template the file at deploy time.",
+        "wrong_answer_trap": "Every dagster.yaml scalar accepts `{env: VAR}`.",
+        "source": "operations-and-debugging.md:46 (skill is wrong; verified by loading instances)"
+      },
+      {
+        "question": "In an OSS project using K8sRunLauncher and QueuedRunCoordinator, I run `dg launch --assets my_asset`. Where does the run execute, and does it respect the queue and pool limits of the instance?",
+        "answer": "It executes in-process in the dg CLI process. It calls the same code as `dagster asset materialize` and goes through no run coordinator, queue or run launcher (no K8s job). It is for local dev. To go through the launcher, use `dagster job launch` or launch from the UI/GraphQL.",
+        "wrong_answer_trap": "It submits a run through the instance's coordinator and launcher, like `dagster job launch`, creating a K8s job.",
+        "source": "operations-and-debugging.md:443; pipes-external-execution.md:106 (skill is misleading; launch.py:56-62)"
+      },
+      {
+        "question": "I add `pool=\"db\"` to an asset but configure no pool limit anywhere. Does it throttle? And if a run holding the only slot of a limit-1 pool is cancelled, what frees the slot?",
+        "answer": "No throttling: a pool with no configured limit is unlimited. A limit comes from `concurrency.pools.default_limit`, `dagster instance concurrency set db 1`, or the UI. Slots held by cancelled or failed runs are not released automatically; set `run_monitoring.enabled: true` plus `run_monitoring.free_slots_after_run_end_seconds` (unset by default, handled by the monitoring daemon), otherwise free them manually in Deployment > Concurrency.",
+        "wrong_answer_trap": "Pools default to a limit of 1, and slots are released when the run ends or is cancelled.",
+        "source": "operations-and-debugging.md:427-428"
+      },
+      {
+        "question": "Docker Compose deployment with a `grpc_server` code location. A sensor's resource reads `dg.EnvVar('API_KEY')`, and API_KEY is set only on the daemon container. What happens at tick time and where must it be set?",
+        "answer": "The tick fails with an 'environment variable ... is not set' error, because the daemon only asks the code server over gRPC (code_location.get_sensor_execution_data) and the code server process evaluates the sensor and builds its resources. Set the variable on the code-server container. Python-module/file locations spawn a subprocess of the daemon instead, so the env is inherited there. The default automation-condition sensor is the exception (evaluated in the daemon).",
+        "wrong_answer_trap": "Sensors run inside the daemon, so setting the variable on the daemon is enough.",
+        "source": "deployment-oss.md:402"
+      },
+      {
+        "question": "A script wrapped in `with open_dagster_pipes() as pipes:` calling `pipes.report_asset_materialization(...)` is run directly as `python script.py` (not launched by Dagster). What happens?",
+        "answer": "open_dagster_pipes() emits a DagsterPipesWarning and returns a MagicMock because no bootstrap payload is found. Every pipes call is a no-op and the script exits 0. Verified by running it: type(ctx) was MagicMock.",
+        "wrong_answer_trap": "It raises an error about missing DAGSTER_PIPES_CONTEXT or fails to import, so a Pipes script cannot be run standalone.",
+        "source": "pipes-external-execution.md:365"
+      },
+      {
+        "question": "The daemon and webserver processes start with `DAGSTER_HOME=/opt/dagster/home`, but that directory does not exist. What happens on Dagster 1.13.28?",
+        "answer": "Instance loading raises DagsterInvariantViolationError ('$DAGSTER_HOME ... is not a directory or does not exist. Dagster requires this environment variable to be set to an existing directory'), so the process fails to start. It does not silently fall back to ephemeral storage. Only an unset DAGSTER_HOME gives the temporary instance.",
+        "wrong_answer_trap": "Dagster quietly uses ephemeral storage and history vanishes on restart (the skill's gotcha), or it auto-creates the directory.",
+        "source": "deployment-oss.md:404 (skill is wrong; verified with DagsterInstance.get())"
+      }
+    ]
+  },
+  {
+    "group": [
+      "dagster-plus.md",
+      "migration-and-legacy.md"
+    ],
+    "files": [
+      {
+        "file": "references/dagster-plus.md",
+        "value": "medium",
+        "cache_worthy": "The `dg plus`/`dg api` CLI surface is post-cutoff and was checked against the 1.13.28 click tree: flag names, `--agent-type`/`--build-strategy`/`--pex-build-method` choices, 3.14 accepted by `--python-version`, and the fact that `deploy start` takes `--target-path` and has no `--project-dir`. Also non-obvious and verified true: branch-deployment concurrency is organization-scoped (3 keys, default 50, max 500 Hybrid / 50 Serverless); `deployment settings set` is a full replace; `free_slots_after_run_end_seconds` is required with `dagster/concurrency_key`; alert-policy validation rules (no mixing health/materialization/schema events, `renotify_interval_minutes` and `consecutive_failure_threshold` limits); the snapshot 130 MB cap vs the 100 MB gRPC limit with `DAGSTER_GRPC_MAX_*`; UI env vars override agent config; Local scope only is pulled by `pull env`; the UI edit of an agent queue is overwritten by the next CI deploy; the DAGSTER_CLOUD_* built-in variables; the legacy `dagster-cloud` to `dg` mapping.",
+        "restates": "The RBAC matrix, SSO/SCIM provider lists, Insights metric names, the full alert event-type and target-type enumerations (also available via `dg api alert-policy ... --response-schema` and the yaml-reference page), Hybrid agent install commands and sizing, the Serverless/Hybrid comparison table, the Sources list (~35 lines of URLs the docs script can fetch), the generic Helm/ECS/Docker agent steps, the Insights/Issues/AI product descriptions, and the OSS-to-Plus/US-to-EU migration table (duplicated in migration-and-legacy.md). All of it is in public docs, and `dg ... --help` or `--response-schema` covers the flag tables.",
+        "cuttable_pct": 40
+      },
+      {
+        "file": "references/migration-and-legacy.md",
+        "value": "high",
+        "cache_worthy": "The 1.13 removal list is the most stale-prior-correcting content. It names `external_assets_from_specs`, single `AssetKey` `deps`, `get_all_asset_specs`, `build_defs_at_path`, and the `*.build_defs()` methods on the Looker/PowerBI/Sigma integrations, all checked as gone in 1.13.28. It also covers the FreshnessPolicy/LegacyFreshnessPolicy rename and the `dagster.deprecated` import, `AssetExecutionContext` no longer subclassing `OpExecutionContext` (verified), the 0.y.z integration versioning (PyPI: dagster-dbt has no 1.x release; latest 0.29.28), the legacy-project modernization recipe (entry-point reinstall, `uv sync` does not reinstall, pin `code_location_name`, baseline `dg list defs --json`), the sensor-to-condition gotchas (`on_cron` as the barrier for all-deps), and the default automation sensor being STOPPED (verified).",
+        "restates": "The Airflow operator equivalents table, the airlift Python API symbol dump and the proxy operator class names, the cron-script wrapper section, the generic Kubernetes upgrade steps (taken almost verbatim from the docs page), the warning-filter snippet, the Dagster+/region migration pointers (duplicated in dagster-plus.md), the Sources list, and most of the Helm `dagit` rename.",
+        "cuttable_pct": 30
+      }
+    ],
+    "findings": [
+      {
+        "file": "references/dagster-plus.md",
+        "line": 146,
+        "kind": "wrong",
+        "claim": "CI step 3 is `dg plus deploy` \"updates code locations in Dagster+\" after `deploy start` and `build-and-push`. The skill also says all three env vars are required, including `DAGSTER_BUILD_STATEDIR`.",
+        "evidence": "In dagster_dg_cli/cli/plus/deploy/commands.py, `deploy_group` is `invoke_without_command=True`. With no subcommand it runs `init_deploy_session` (which calls `shutil.rmtree(statedir)` in deploy_session.py:142-143), then `build_artifact`, then `finish_deploy_session`. So the bare command restarts and rebuilds everything, discarding the prior start and build-and-push state. The final-stage subcommand is `dg plus deploy finish` (walk of the click tree lists it). `_get_statedir()` defaults to `<tmp>/dg-build-state` when `DAGSTER_BUILD_STATEDIR` is unset, and org/token can come from `dg plus login` config. The docs page (configuring-ci-cd) has the same error, and also uses `--project-dir` for `start`, which does not exist.",
+        "fix": "Change step 3 to `dg plus deploy finish`. Say that bare `dg plus deploy` runs start, build and finish end to end and wipes the statedir. Say that `DAGSTER_BUILD_STATEDIR` is optional and is cleared by `start`; org and token come from env vars or the config file.",
+        "verified": true
+      },
+      {
+        "file": "references/dagster-plus.md",
+        "line": 275,
+        "kind": "wrong",
+        "claim": "\"Config lands in `~/.dagster_cloud_cli/config`, shared with the `dagster-cloud` CLI.\"",
+        "evidence": "Ran `dg plus config set --organization foo --deployment prod` with a scratch HOME and no existing config. The result was `$HOME/.config/dg.toml` containing `[cli.plus] organization=\"foo\" default_deployment=\"prod\"`, and no `~/.dagster_cloud_cli/config`. In dagster_shared/plus/config.py, `~/.dagster_cloud_cli/config` is read and written only if it already exists. If Plus config exists in both files, `_get_dagster_plus_config_path_and_raw_config` raises \"Found Dagster Plus config in both ... Please consolidate\". Overrides are `DG_CLI_CONFIG` and `DAGSTER_CLOUD_CLI_CONFIG`.",
+        "fix": "Say a fresh `dg plus login` or `config set` writes `[cli.plus]` in `~/.config/dg.toml` (`$XDG_CONFIG_HOME/dg.toml`). A legacy `~/.dagster_cloud_cli/config` is used if present. Having Plus config in both files is an error. Add the two override env vars.",
+        "verified": true
+      },
+      {
+        "file": "references/dagster-plus.md",
+        "line": 252,
+        "kind": "misleading",
+        "claim": "The token table lists a distinct \"CI API token\" kind, created by `dg plus create ci-api-token`, with no role requirement. The same table says agent tokens need Organization Admin.",
+        "evidence": "dagster_dg_cli/cli/plus/create/ci_api_token.py:31-34 executes `CREATE_AGENT_TOKEN_MUTATION` (`createAgentToken` returning `DagsterCloudAgentToken`) and echoes the token. The command mints an agent token, not a user token or a separate CI kind. This is source-verified; I did not call a live Plus org.",
+        "fix": "State that `ci-api-token` is implemented as agent-token creation, so it needs the agent-token privilege (Organization Admin) and the token shows up under agent tokens. Don't present it as a third kind that any user can create.",
+        "verified": true
+      },
+      {
+        "file": "references/dagster-plus.md",
+        "line": 442,
+        "kind": "misleading",
+        "claim": "Credits: \"materializations backed by step execution cost one credit per partition\", and asset observations cost zero.",
+        "evidence": "docs deployment/dagster-plus/management/credit-usage: credits are 1 per step execution plus 1 per materialization event. A step that materializes one asset or partition costs 2, each extra asset in the step costs 1, a plain op step costs 1, an observable source asset execution costs 1, and a failed step costs 1. Asset checks, observation events, sensor evaluations and sensor-reported materializations are free.",
+        "fix": "Replace with: 1 credit per step plus 1 per materialization event (one per partition), and free for asset checks, observation events, sensor evaluations and sensor-reported materializations. Add that an observable source asset execution costs 1.",
+        "verified": true
+      },
+      {
+        "file": "references/dagster-plus.md",
+        "line": 365,
+        "kind": "misleading",
+        "claim": "\"The MCP server covers roughly the same surface as `dg api`, so an agent with it connected rarely needs to shell out.\"",
+        "evidence": "The MCP docs capability table (getting-started/ai-tools/dagster-mcp) covers runs, run logs, assets, deployments (view only), alert policies and Issues. The `dg api` tree has agent, artifact, asset-check, code-location add/delete, deployment settings set, organization settings/saml, schedule, sensor, secret and job, none of which are in the MCP table. The skill's own text (line 363) says assets and deployments can't be updated.",
+        "fix": "Delete the sentence. Say the MCP server covers runs, logs, assets, alert policies and Issues, and that settings, code locations, secrets, schedules and sensors still go through `dg api`.",
+        "verified": true
+      },
+      {
+        "file": "references/dagster-plus.md",
+        "line": 120,
+        "kind": "internal-conflict",
+        "claim": "Line 120 says `dagster`, `dagster-dg-cli` and `dagster-cloud` must be installed \"in the runtime environment\". Line 130 says `dagster-dg-cli` is a CI-only dev dependency, excluded by `uv sync --no-dev`.",
+        "evidence": "The docs' code-requirements page says dg-cli is required in the runtime environment. The newer configuring-ci-cd page says: \"`dagster-cloud` must be installed inside your production container so the Dagster+ code server can start. `dagster-dg-cli` runs only in CI\". The skill repeats both without reconciling them.",
+        "fix": "Keep the CI-page version: `dagster-cloud` must be in the image, `dagster-dg-cli` is needed only on the CI side. Drop dg-cli from the runtime-requirements sentence.",
+        "verified": true
+      },
+      {
+        "file": "references/dagster-plus.md",
+        "line": 32,
+        "kind": "misleading",
+        "claim": "\"Enable non-isolated runs in deployment settings, then uncheck `Isolate run environment`...\" This implies the feature is off by default.",
+        "evidence": "The full-deployment-settings-reference says `non_isolated_runs.enabled` has **Default** `true`, while run-isolation prose says it \"must first be enabled\". The docs conflict with each other. Not tested on a live org. The skill's own YAML sets `enabled: true`.",
+        "fix": "Say the documented default for `non_isolated_runs.enabled` is true. If the Launchpad toggle is missing, check `dg api deployment settings get`. Also state that Serverless non-isolated runs get 0.25 vCPU / 1 GB.",
+        "verified": true
+      },
+      {
+        "file": "references/migration-and-legacy.md",
+        "line": 83,
+        "kind": "wrong",
+        "claim": "\"Old behavior: `auto_materialize: {use_sensors: true}`\" (restores the pre-1.8 single global evaluation pass).",
+        "evidence": "settings_methods.py: `auto_materialize_use_sensors` returns `get_settings('auto_materialize').get('use_sensors', True)`, so true is the default. external.py:201 returns early (no default automation sensor) only when `not self._auto_materialize_use_sensors`, and asset_daemon.py:559 branches on the same flag. The skill copied the sentence from MIGRATION.md (1.8.0), which has the same error. Retaining the old behavior means `use_sensors: false`.",
+        "fix": "Write `auto_materialize: {use_sensors: false}` to restore the single global daemon pass. Say the default is true.",
+        "verified": true
+      },
+      {
+        "file": "references/migration-and-legacy.md",
+        "line": 235,
+        "kind": "internal-conflict",
+        "claim": "The sensor-to-condition table recommends `eager().ignore(dg.AssetSelection.keys(\"static_config\"))`, but line 117 lists `AssetSelection.keys(...)` as deprecated in favor of `.assets(...)`.",
+        "evidence": "`dg.AssetSelection.keys('a')` emits `DeprecationWarning: Function AssetSelection.keys is deprecated and will be removed in 2.0. Use AssetSelection.assets instead.` `.assets('a')` works silently.",
+        "fix": "Use `dg.AssetSelection.assets(\"static_config\")` in the example.",
+        "verified": true
+      },
+      {
+        "file": "references/migration-and-legacy.md",
+        "line": 140,
+        "kind": "wrong",
+        "claim": "\"`IOManagerFactory` is the escape hatch for stateful managers.\"",
+        "evidence": "`hasattr(dagster, 'IOManagerFactory')` is False, and grep over the installed dagster package finds no such class. The exported symbol is `ConfigurableIOManagerFactory` (dagster/__init__.py:75).",
+        "fix": "Replace with `ConfigurableIOManagerFactory`.",
+        "verified": true
+      },
+      {
+        "file": "references/migration-and-legacy.md",
+        "line": 190,
+        "kind": "misleading",
+        "claim": "Step 7 says \"With `setup.py`, put this in a new `setup.cfg` instead\", but the only snippet shown is pyproject TOML syntax.",
+        "evidence": "The docs page migrating-project step 3.3.2 gives the setup.cfg form as INI: `[options.entry_points]` then `dagster_dg_cli.registry_modules =` and `    my_existing_project = my_existing_project.components`. It adds that any existing `setup.py` entry points must be moved into setup.cfg too. The entry-point group name is confirmed in dagster_dg_core/context.py:55.",
+        "fix": "Add the INI snippet and the note about moving existing entry points. Optionally note that `registry_modules = [...]` under `[tool.dg.project]` (a `DgProjectConfig` field) is a no-reinstall alternative when no entry point exists (component.py).",
+        "verified": true
+      },
+      {
+        "file": "references/migration-and-legacy.md",
+        "line": 467,
+        "kind": "misleading",
+        "claim": "Rows 119 and 128 say `auto_observe_interval_minutes=` and `legacy_freshness_policy=` on `AssetOut`, `@observable_source_asset` and the like were \"Removed in 1.13\". Detection grep line 470 covers `freshness_policy=` but nothing covers `auto_observe`.",
+        "evidence": "In 1.13.28, `dg.observable_source_asset(auto_observe_interval_minutes=5, name='zz')(f)` and `dg.AssetOut(legacy_freshness_policy=L)` both succeed silently. `observable_source_asset(totally_bogus=5)` also succeeds, so unknown kwargs are swallowed and the old settings are ignored with no error. `@asset(legacy_freshness_policy=...)` and `AssetSpec(legacy_freshness_policy=...)` still work with a DeprecationWarning. `@asset(freshness_policy=LegacyFreshnessPolicy(...))` raises ParameterCheckError, because `freshness_policy=` now takes only the new class.",
+        "fix": "Add `auto_observe_interval_minutes` to a detection grep. Say \"removed\" means the argument is silently ignored, so the old behavior disappears without an error. Add that `freshness_policy=` on `@asset` and `AssetSpec` now accepts only the new `FreshnessPolicy`.",
+        "verified": true
+      },
+      {
+        "file": "references/migration-and-legacy.md",
+        "line": 184,
+        "kind": "unverifiable",
+        "claim": "\"`dagster definitions validate` warns when the name changes\" (code_location_name).",
+        "evidence": "`dagster definitions validate --help` describes only load validation. Searching dagster/_cli/definitions.py and utils.py for location-name or rename logic found nothing. It could not be reproduced, and nothing in the migrating-project docs page backs it.",
+        "fix": "Remove the claim, or replace it with the verifiable instruction to keep `code_location_name` equal to the old location name. Run `dg list defs` and compare the baseline.",
+        "verified": false
+      }
+    ],
+    "probes": [
+      {
+        "question": "I'm wiring a custom (non-GitHub) CI to deploy to Dagster+ with the `dg` CLI, in stages: start the session, build and push the image, then tell Dagster+ to update the code locations. Which commands do I run, and what happens if the last stage is just `dg plus deploy`?",
+        "answer": "`dg plus deploy start`, then `dg plus deploy build-and-push`, then `dg plus deploy finish`. Bare `dg plus deploy` (no subcommand) runs the whole start, build and finish sequence end to end, and init deletes and recreates the statedir, so running it as the last stage redoes everything instead of finalizing. `start` uses `--target-path` (no `--project-dir`).",
+        "wrong_answer_trap": "Run `dg plus deploy` as the final step, as the docs and the skill's CI snippet say. Or use `--project-dir=.` on `start`.",
+        "source": "references/dagster-plus.md:138-149"
+      },
+      {
+        "question": "On a fresh laptop I run `dg plus login` or `dg plus config set --organization acme --deployment prod`. Which file does the CLI write the config to, and what breaks if an old `~/.dagster_cloud_cli/config` also has Plus settings?",
+        "answer": "It writes a `[cli.plus]` table in the user dg config `~/.config/dg.toml` (`$XDG_CONFIG_HOME/dg.toml`, or the `DG_CLI_CONFIG` path). It does not create `~/.dagster_cloud_cli/config`; that legacy file is only read or updated if it already exists. If Plus config exists in both files, the CLI raises \"Found Dagster Plus config in both ... Please consolidate\".",
+        "wrong_answer_trap": "It writes `~/.dagster_cloud_cli/config`, shared with the dagster-cloud CLI.",
+        "source": "references/dagster-plus.md:275"
+      },
+      {
+        "question": "For Dagster+ branch deployments, I want at most 5 concurrent runs per PR and 100 across all PRs. Is this a deployment setting I set with `dg api deployment settings set`, and what role does it need?",
+        "answer": "No. Branch-deployment concurrency is organization-scoped: `max_concurrent_branch_deployment_runs` (default 50; max 500 Hybrid / 50 Serverless), `max_concurrent_runs_per_branch_deployment` (default null, must be <= the global cap) and `branch_deployment_tag_concurrency_limits`. Edit them in Organization Settings > Advanced or with `dg api organization settings get/set`, as Organization Admin. Both run limits apply at once. Full-deployment settings do not govern branch deployments.",
+        "wrong_answer_trap": "Put `concurrency.runs.max_concurrent_runs` in the deployment settings YAML for the branch deployment. Or answer that the per-branch limit overrides the global one.",
+        "source": "references/dagster-plus.md:163-171, 438"
+      },
+      {
+        "question": "I'm upgrading a Dagster OSS instance past 1.8 and want to keep automation-condition evaluation in the single global AssetDaemon pass instead of per-code-location `default_automation_condition_sensor`s. What dagster.yaml setting does that, and is the AssetDaemon still needed otherwise?",
+        "answer": "`auto_materialize: {use_sensors: false}`. The default is `use_sensors: true`. Even in sensor mode the AssetDaemon still has to run, because it does the sensors' work. The default automation sensor is created per code location with default status STOPPED, so it must be turned on in the UI.",
+        "wrong_answer_trap": "`use_sensors: true`, which is what the upgrade guide and the skill say. Or that the daemon is no longer required once sensors are used.",
+        "source": "references/migration-and-legacy.md:81-83"
+      },
+      {
+        "question": "In Dagster 1.13, I port old code: `@asset(freshness_policy=LegacyFreshnessPolicy(maximum_lag_minutes=5))`, `AssetOut(legacy_freshness_policy=...)` and `@observable_source_asset(auto_observe_interval_minutes=10)`. What does each do?",
+        "answer": "The first raises ParameterCheckError, because `freshness_policy=` on `@asset` and `AssetSpec` accepts only the new `dg.FreshnessPolicy`; legacy policies go through the deprecated `legacy_freshness_policy=`, which still works on `@asset` and `AssetSpec`. The other two are removed in 1.13 but are silently swallowed by `**kwargs`: no error, no effect. Use `automation_condition=` plus schedules/sensors or freshness checks.",
+        "wrong_answer_trap": "Assumes all three still work with warnings, or that removed args raise TypeError.",
+        "source": "references/migration-and-legacy.md:119, 127-128"
+      },
+      {
+        "question": "I'm on Dagster 1.13 and need to model external (not Dagster-produced) assets. Which constructs from older tutorials will fail, and what's the replacement?",
+        "answer": "`external_assets_from_specs` and `external_asset_from_spec` are no longer exported and fail on import. A bare `deps=dg.AssetKey('x')` fails (AssetKey is no longer iterable; wrap it in a list or use `dg.AssetDep`). Pass `dg.AssetSpec(...)` objects straight into `Definitions(assets=[...])`.",
+        "wrong_answer_trap": "`external_assets_from_specs([...])` (still deprecated-but-working in 1.12) or `SourceAsset`.",
+        "source": "references/migration-and-legacy.md:109-112"
+      },
+      {
+        "question": "I'm bumping a project from dagster 1.12 to 1.13.28 and my lockfile pins `dagster-dbt==1.13.28` and `dagster-snowflake==1.13.28`. Will it resolve, and what's the right approach?",
+        "answer": "No. Integration libraries are on a separate 0.y.z track (e.g. dagster-dbt latest is 0.29.28; PyPI has no 1.x release of it). Bump `dagster==<version>` and let the resolver pick the library versions (`uv lock --upgrade-package dagster --upgrade-package dagster-dbt`). A library minor bump (0.29 to 0.30) may break.",
+        "wrong_answer_trap": "Pin every dagster-* package to the same 1.13.x version as core.",
+        "source": "references/migration-and-legacy.md:50-64"
+      },
+      {
+        "question": "I converted a legacy Dagster project to the `dg` layout by adding a `dagster_dg_cli.registry_modules` entry point to its pyproject.toml, then ran `uv sync`, but `dg list registry-modules` doesn't show my components module. Why, and how do I fix it?",
+        "answer": "Entry points are registered only at package install time and `uv sync` does not reinstall an existing editable package. Reinstall with `uv pip install --editable .` (the dg warning says to reinstall the package); then `dg list registry-modules` shows it. For a `setup.py`-only package the entry point must go in `setup.cfg` in INI form (`[options.entry_points]`).",
+        "wrong_answer_trap": "Run `uv sync` or restart the shell/`dg dev`; or put the TOML snippet in setup.cfg.",
+        "source": "references/migration-and-legacy.md:189-198"
+      }
+    ]
+  },
+  {
+    "group": [
+      "integrations-catalog.md",
+      "integrations-dbt-and-elt.md",
+      "api-quick-reference.md"
+    ],
+    "files": [
+      {
+        "file": "references/integrations-catalog.md",
+        "value": "medium",
+        "cache_worthy": "The Component-type table (spot-checked: every class and top-level export I grepped exists in the 0.29.28 wheels), the legacy-to-current rename table (dagit_base_url, job_selection, Configurable*IOManager, etc., all verified), the dg workflow (dg list components --package, dg scaffold defs, dg check defs before launch), and the gotchas: postgres is storage only, DataFrame I/O managers are separate packages, BI loaders return non-materializable external specs, DuckDB docs live under the motherduck slug. The component-versus-Python decision guidance is also worth keeping.",
+        "restates": "Most 'Key APIs' columns and the per-library Docs paths restate API reference and pip metadata. The Slack, Teams, PagerDuty, Datadog, Prometheus and GitHub one-liners, the OpenAI/MLflow/dagstermill/pandera snippets, and the long cloud-storage resource lists are in each library's docs and are guessable from class names. The Sources list restates URLs the docs script can already fetch.",
+        "cuttable_pct": 40
+      },
+      {
+        "file": "references/integrations-dbt-and-elt.md",
+        "value": "high",
+        "cache_worthy": "Behavior a model would get wrong: the Component-first workflow and its YAML keys; stamping meta.dagster.asset_key on dbt sources to wire non-dbt upstreams; microbatch needs --event-time-start/--event-time-end, not --vars; snapshot concurrency pools; manifest lifecycle in CI, including dg plus integrations dbt manage-manifest and prepare-and-package (flags verified); the Fivetran schedule-to-manual side effect and resync cost; dlt state and partition gotchas; the Sling binary download; the DagsterDbtTranslatorSettings defaults (all verified); the dbt Cloud pool mechanics; the troubleshooting table. A few specifics are wrong or omitted (see findings), which matters because the file is so authoritative.",
+        "restates": "The @dbt_assets, DbtProject, DbtCliResource and dbt Cloud parameter lists, @sling_assets/@dlt_assets keyword lists, the Python Fivetran/Airbyte constructor blocks and the Sources section restate API docs and signatures. The legacy table duplicates much of integrations-catalog.md.",
+        "cuttable_pct": 20
+      },
+      {
+        "file": "references/api-quick-reference.md",
+        "value": "low",
+        "cache_worthy": "Only the lifecycle flags and 'does X exist' guidance that frontier models cannot recall for 1.13: FreshnessPolicy replacing the freshness-check builders, AutomationCondition operand and method names, preview/beta markers (spot-checked and mostly right), load_from_defs_folder project_root deprecation, the Component/StateBackedComponent surface, AssetCheckEvaluation and report_runless_asset_event, and the Legacy table. Several of the headline 'deprecated' and 'there is no X' calls are wrong in 1.13.28, so the file currently misleads on exactly the facts it claims to add.",
+        "restates": "Most of the roughly 450 rows are name lists with abbreviated signatures that `inspect.signature` or the API docs return in one call. The Errors table, Metadata/Types, Instance, Utilities and Pipes rows and the Sources list are things a frontier model already knows or can look up on demand. Parameter lists are not in declaration order despite the intro, so they cannot be trusted as signatures.",
+        "cuttable_pct": 60
+      }
+    ],
+    "findings": [
+      {
+        "file": "references/api-quick-reference.md",
+        "line": 274,
+        "kind": "wrong",
+        "claim": "`dg.materialize_to_memory` is marked ⚠ 'Deprecated. Use `materialize` with `InMemoryIOManager`' (also line 428 'Deprecated helper'). It is not deprecated in 1.13.28. testing-and-asset-checks.md (lines 31, 99, 109, 410) and io-managers.md (lines 61, 344) recommend it as the default unit-test entry point, so the references contradict each other.",
+        "evidence": "`inspect.getsource(dg.materialize_to_memory)` shows `@public` with no lifecycle decorator. `dagster._annotations.is_deprecated/is_superseded` both False. `dg.materialize_to_memory([a])` runs under `warnings.simplefilter('error')` with no warning. API docs page 'execution' lists it plainly. Passing an io_manager in `resources` raises DagsterInvariantViolationError as the other files say.",
+        "fix": "Remove ⚠ and the Legacy-table row. Describe it as the in-memory test helper that forbids io_manager resources. Reserve ⚠ for symbols with a real lifecycle annotation.",
+        "verified": true
+      },
+      {
+        "file": "references/api-quick-reference.md",
+        "line": 55,
+        "kind": "wrong",
+        "claim": "The `dg.AssetSpec` signature lists `backfill_policy`. AssetSpec has no such parameter. The row also omits `freshness_policy`, `is_virtual` and `legacy_freshness_policy`, even though line 94 says to pass FreshnessPolicy via `freshness_policy=`.",
+        "evidence": "`dg.AssetSpec('a', backfill_policy=dg.BackfillPolicy.single_run())` raises `TypeError: AssetSpec got an unexpected keyword argument 'backfill_policy'`. `dg.AssetSpec._fields` is key, deps, description, metadata, group_name, skippable, code_version, legacy_freshness_policy, freshness_policy, automation_condition, owners, tags, partitions_def, is_virtual. `inspect.signature(dg.asset)` includes `freshness_policy`, `hooks`, `is_virtual`.",
+        "fix": "Drop `backfill_policy` from the AssetSpec row. Add `freshness_policy` (and `is_virtual`) to the AssetSpec, @asset and AssetOut rows. Backfill policy belongs on the decorators and AssetsDefinition, not the spec.",
+        "verified": true
+      },
+      {
+        "file": "references/api-quick-reference.md",
+        "line": 147,
+        "kind": "misleading",
+        "claim": "The intro says parameters are listed 'in declaration order', but several rows are not. `DynamicPartitionsDefinition` is listed as `(name, partition_fn)` (actual order is `partition_fn, name`). `TimeWindowPartitionsDefinition` is listed as `(cron_schedule, start, timezone, end, ...)` (actual order starts `start, fmt, end, schedule_type, timezone, ...`). Positional use based on the table breaks.",
+        "evidence": "`inspect.signature`: DynamicPartitionsDefinition(partition_fn, name). `dg.DynamicPartitionsDefinition('fruits')` raises `ParameterCheckError: Param 'partition_fn' is not callable. Got 'fruits'`. `dg.TimeWindowPartitionsDefinition('0 0 * * *','2024-01-01')` raises ValueError because the first positional is `start`. Also `Resolver.__init__` is `(fn, *, model_field_name, model_field_type)`, not the listed order.",
+        "fix": "Change the intro to 'key parameters, not in call order; pass by keyword', and fix these two rows to the real order or drop positional hints.",
+        "verified": true
+      },
+      {
+        "file": "references/api-quick-reference.md",
+        "line": 415,
+        "kind": "wrong",
+        "claim": "'There is no `terminate_run` on the GraphQL client' (and line 34 'There is no `resolve_job_def`'). Both methods exist in 1.13.28. They are just not `@public` and not in the API docs, so the flat 'no such method' will push agents to hand-write GraphQL for a call the client already has.",
+        "evidence": "`hasattr(dagster_graphql.DagsterGraphQLClient, 'terminate_run')` is True, `inspect.signature` is `(self, run_id: str)`, `is_public` False. `dg.Definitions.resolve_job_def` exists (signature `(self, name)`, `is_public` False), with a docstring about resolving UnresolvedAssetJobDefinition. `get_runs` and `submit_run` do exist but are non-public, so line 295 is accurate.",
+        "fix": "Reword to 'no public X; `DagsterGraphQLClient.terminate_run(run_id)` exists but is not in the API docs'. Same for `resolve_job_def`.",
+        "verified": true
+      },
+      {
+        "file": "references/api-quick-reference.md",
+        "line": 90,
+        "kind": "misleading",
+        "claim": "`AssetCheckSeverity` row says 'Severity of a failed check; `WARN` does not fail the run', which implies ERROR does fail the run. A failed non-blocking check with ERROR severity also does not fail the run. Only `blocking=True` with ERROR severity fails the step and skips downstream assets.",
+        "evidence": "Scratch run with `dg.materialize([a, b(deps=a), check])`, check returns `passed=False, severity=ERROR`. Non-blocking: `result.success=True` and downstream `b` ran. With `blocking=True`: `DagsterAssetCheckFailedError: 1 blocking asset check failed with ERROR severity`, RUN_FAILURE, `b` not executed.",
+        "fix": "Say 'A failed check is recorded but the run still succeeds unless the check is `blocking=True` and severity is ERROR; WARN never blocks.'",
+        "verified": true
+      },
+      {
+        "file": "references/api-quick-reference.md",
+        "line": 63,
+        "kind": "misleading",
+        "claim": "The ⚠ legend means 'deprecated or superseded', but it is applied to symbols with no lifecycle annotation: `AssetsDefinition.to_source_asset(s)` (lines 63, 422), `@dg.resource`, `Field`, `Shape`, `make_values_resource`, `@dg.io_manager`. `materialize_to_memory` (line 274) is covered in a separate finding. An agent will refuse to use or 'migrate away from' live APIs, and the file's own ⚠ marker undercuts the skill's reliability.",
+        "evidence": "`is_deprecated/is_superseded` return False for `AssetsDefinition.to_source_asset`, `to_source_assets`, `resource`, `Field`, `io_manager`, `make_values_resource`. The assets API docs list `to_source_asset` with no deprecation note. By contrast `SourceAsset`, `AssetSelection.keys/.sources`, `AutoMaterializePolicy`, `fs_io_manager` (superseded), `build_*_freshness_checks` (superseded) and `multi_asset_sensor` (superseded per docs) are annotated.",
+        "fix": "Use ⚠ only for annotated symbols. Mark the others 'legacy style, still supported' or drop them.",
+        "verified": true
+      },
+      {
+        "file": "references/api-quick-reference.md",
+        "line": 190,
+        "kind": "stale",
+        "claim": "Several enumerations and signatures are incomplete for 1.13.28: `DagsterRunStatus` omits `SUSPENDED` (a valid `run_status=` value), and the @asset, AssetSpec and AssetOut rows omit `freshness_policy`, `hooks` and `is_virtual`. Cheap to fix and affects `run_status_sensor` correctness.",
+        "evidence": "`dg.DagsterRunStatus.__members__` is QUEUED, NOT_STARTED, MANAGED, STARTING, STARTED, SUSPENDED, SUCCESS, FAILURE, CANCELING, CANCELED. `inspect.signature(dg.asset)` includes `freshness_policy`, `hooks`, `is_virtual`.",
+        "fix": "Add `.SUSPENDED` and the missing parameters, or state that the lists are partial.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-catalog.md",
+        "line": 416,
+        "kind": "wrong",
+        "claim": "`dg scaffold component dagster_spark.SparkDeclarativePipelineComponent my_sdp --pipeline-spec-path ./spark-pipeline.yml`. `dg scaffold component` scaffolds a custom component type and takes a single NAME. It rejects the component-type argument and the option. Component instances use `dg scaffold defs`. The upstream docs page has the same typo. The scaffolder also takes no parameters (it hard-codes `pipeline_spec_path: spark-pipeline.yml` and `discovery_mode: dry_run_with_fallback`), so edit defs.yaml instead of passing a flag.",
+        "evidence": "In a scratch copy: `uv run dg scaffold component dagster_spark.SparkDeclarativePipelineComponent my_sdp --pipeline-spec-path ./x.yml` gives `Error: No such option '--pipeline-spec-path'`. `dg scaffold defs ...` with the same type reaches the registry lookup (package not installed). `dg scaffold component --help` reads 'Scaffold of a custom Dagster component type... NAME'. dagster_spark/components/spark_declarative_pipeline/scaffolder.py (0.29.28 wheel) has no `get_scaffold_params`.",
+        "fix": "Use `dg scaffold defs dagster_spark.SparkDeclarativePipelineComponent my_sdp`, then set `pipeline_spec_path` in the generated defs.yaml. The no-params claim is inferred from the wheel source; I could not run it without installing the package.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-catalog.md",
+        "line": 84,
+        "kind": "misleading",
+        "claim": "State-backed components are listed as only Sigma, Omni and Databricks workspace (lines 84-85, 460-462). Fifteen shipped components are state-backed, including DbtProject, DbtCloud, Fivetran, Airbyte, Airflow instance, Census, Looker, PowerBI, Tableau, SnowflakeDbtProject, SparkDeclarativePipeline and Evidence V2. The dbt file itself says dbt, Fivetran and Airbyte are state-backed, so the two files disagree. An agent will skip the state-refresh step for most integrations.",
+        "evidence": "`grep '^class .*(StateBackedComponent'` over the 0.29.x wheels (airbyte, airlift, census, databricks, dbt, evidence, fivetran, looker, omni, powerbi, sigma, snowflake, spark, tableau) returns 15 classes. `dg utils refresh-defs-state` exists (`dg utils refresh-defs-state --help`).",
+        "fix": "Say 'Most workspace-style components (dbt, dbt Cloud, Fivetran, Airbyte, Census, Looker, Power BI, Tableau, Sigma, Omni, Databricks workspace, Airflow instance, Snowflake dbt, Spark SDP) are StateBackedComponents' and name `dg utils refresh-defs-state`.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-catalog.md",
+        "line": 450,
+        "kind": "misleading",
+        "claim": "'BI assets are external by default... until you wrap them in a refresh definition' and the BI patterns section show only Python wrappers. The Components can turn on materialization from YAML: `PowerBIWorkspaceComponent.enable_semantic_model_refresh` (bool or list of names), `TableauComponent.enable_embedded_datasource_refresh` and `.enable_published_datasource_refresh`, and `LookerComponent.pdt_builds`. The file's own rule is 'prefer the Component', so agents will drop to Python unnecessarily. Per-type `translation:` also takes `for_dashboard`/`for_report`/`for_semantic_model` (PowerBI) and `for_workbook`/`for_dataset` (Sigma) blocks.",
+        "evidence": "0.29.28 wheel source: power_bi_workspace/component.py has `enable_semantic_model_refresh: bool | list[str] = False` and PowerBIAssetArgs.for_*; tableau_component.py has `enable_embedded_datasource_refresh` / `enable_published_datasource_refresh`; looker_component.py has `pdt_builds: list[RequestStartPdtBuild]`; sigma_component.py has `for_workbook`, `for_dataset`.",
+        "fix": "In the BI patterns and the BI gotcha, add one line per component naming the YAML switch, and note the targeted `for_*` translation keys.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-catalog.md",
+        "line": 433,
+        "kind": "wrong",
+        "claim": "'Only basic auth is supported by the component today.' `AirflowInstanceComponent` resolves both `basic_auth` and `mwaa` auth blocks in YAML (`env_name`, `region_name`, `profile_name`, AWS keys). Only the scaffolder is limited: `--auth-type mwaa` raises 'Unsupported auth type'. MWAA needs `dagster-airlift[mwaa]`, and the in-Airflow side needs `[in-airflow]`.",
+        "evidence": "dagster_airlift/core/components/airflow_instance/component.py (0.29.28 wheel): `ResolvedAirflowMwaaAuthBackend(type: Literal['mwaa'], env_name, ...)` and `resolve_auth` has an `elif auth.type == 'mwaa'` branch importing `MwaaSessionAuthBackend`. The scaffolder's else-branch raises ValueError. METADATA `Provides-Extra`: core, in-airflow, mwaa.",
+        "fix": "Say 'the scaffolder only generates basic_auth; write an `auth: {type: mwaa, env_name: ...}` block by hand for MWAA (needs the [mwaa] extra)'. Mention the `[in-airflow]` extra for the proxying side.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-catalog.md",
+        "line": 444,
+        "kind": "internal-conflict",
+        "claim": "'Every `dagster-*` library releases in lockstep with `dagster`' conflicts with the last gotcha (line 463) and is false for community and newer packages: dagster-evidence 0.2.1, dagster-apprise 0.0.3, dagster-iceberg 0.3.14, dagster-polars 0.27.12, dagster-meltano 1.5.5, dagster-anthropic and -gemini 0.0.6. Core libraries do pair with dagster (1.13.28 maps to 0.29.28 and pins `dagster==1.13.28`). Pinning advice for community packages ('pin the whole family') therefore fails.",
+        "evidence": "PyPI JSON for each package: latest wheels dagster_dbt-0.29.28 (Requires-Dist dagster==1.13.28) versus dagster_evidence-0.2.1, dagster_apprise-0.0.3, dagster_iceberg-0.3.14, dagster_polars-0.27.12, dagster_meltano-1.5.5.",
+        "fix": "Say: 'dagster-supported libraries use 0.(N-?) numbering pinned to the same dagster release (1.13.28 pairs with 0.29.28); community packages version independently, so check their dagster constraint.'",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-catalog.md",
+        "line": 83,
+        "kind": "stale",
+        "claim": "'Verified `dg scaffold defs <type> <name>` targets. Anything not listed has no Component' plus 'Core: TemplatedSqlComponent, PythonScriptComponent, DefsFolderComponent' is incomplete. `dg list components` in 1.13.28 also lists `dagster.DefinitionsComponent`, `dagster.FunctionComponent` and `dagster.UvRunComponent`.",
+        "evidence": "`uv run dg list components` in the 1.13.28 project returns six core keys: DefinitionsComponent, DefsFolderComponent, FunctionComponent, PythonScriptComponent, TemplatedSqlComponent, UvRunComponent. `dagster_evidence` also ships `EvidenceProjectComponentV2`.",
+        "fix": "List all six core components, and soften 'Anything not listed has no Component' to 'run `dg list components`'.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-catalog.md",
+        "line": 108,
+        "kind": "misleading",
+        "claim": "`SparkDeclarativePipelineComponent` is attributed to dagster-pyspark (lines 80, 107) while the `dagster-spark` row says Component '—'. The component and its scaffolder live in the `dagster-spark` distribution (`dagster_spark.components`); dagster-pyspark only pulls it in as a dependency.",
+        "evidence": "dagster-spark 0.29.28 wheel contains dagster_spark/components/spark_declarative_pipeline/{component,scaffolder,discovery,resource}.py and re-exports it in `__init__`. dagster-pyspark METADATA has `Requires-Dist: dagster-spark==0.29.28`.",
+        "fix": "Move the component to the dagster-spark row and note that dagster-pyspark installs it transitively.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-dbt-and-elt.md",
+        "line": 359,
+        "kind": "wrong",
+        "claim": "'Default keys prepend the translator's `target_prefix`: stream `public.accounts` becomes `target_public_accounts` depending on `public_accounts`.' This repeats a docstring that is wrong. The real key is a multi-segment path `target/public/accounts` and the dep is `public/accounts`. Agents that write `deps=['target_public_accounts']` or a dbt `asset_key: ['target_public_accounts']` get an unresolved key. Note too that the key comes from the stream's `object` when one is set, not the source stream name.",
+        "evidence": "dagster_sling_translator.py `_default_asset_key_fn` returns `AssetKey([self.target_prefix] + self.sanitize_stream_name(object_key or stream_name).split('.'))`. `_default_deps_fn` returns `[AssetKey(sanitize(stream_name).split('.'))]`. Running dagster's `clean_name_lower_with_dots('public.accounts')` gives `public.accounts`, and `AssetKey(['target'] + ...)` prints as `target/public/accounts`. The Evidence docs example deps `target/main/orders` agree.",
+        "fix": "State: asset key `['target', <object path segments>]` (for example `target/public/accounts`), dep `['public','accounts']`; override via `meta.dagster.asset_key` / `deps` in replication.yaml.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-dbt-and-elt.md",
+        "line": 112,
+        "kind": "stale",
+        "claim": "`DbtCliResource(... dbt_executable=\"dbt\" ...)` presents `dbt` as the default. In 1.13.28 the default is `dbtf` (dbt Fusion) when it is on PATH, otherwise `dbt`. Under Fusion, `.fetch_row_counts()` (line 114) logs a warning and silently emits no row counts. `DbtProject(...)` (same line) also omits `install_deps` (default True); prepare runs `dbt deps` automatically when packages exist, and the component `project:` mapping accepts `install_deps` too.",
+        "evidence": "dagster_dbt/core/resource.py: `_get_dbt_executable()` returns 'dbtf' if `shutil.which('dbtf')` else 'dbt'; field description 'Defaults to `dbtf` if available, otherwise `dbt`.' dbt_event_iterator.py `fetch_row_counts`: `if self._dbt_cli_invocation.is_fusion: logger.warning(...); return` unchanged iterator. dbt_project.py: `install_deps: bool = True`, runs `deps --quiet` when packages.yml exists.",
+        "fix": "Write `dbt_executable` default as 'dbtf if on PATH else dbt', add a Fusion note on row counts, and add `install_deps=True` to the DbtProject signature.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-dbt-and-elt.md",
+        "line": 49,
+        "kind": "stale",
+        "claim": "The component attribute table omits `translation_settings`, the only YAML route to `DagsterDbtTranslatorSettings` flags (for example `enable_source_tests_as_checks: true`). The tests-as-checks section (lines 148-155) and the settings defaults (line 130) are Python-only, so a YAML-first agent cannot discover how to turn source tests on. The component's default settings class (`DagsterDbtComponentTranslatorSettings`) flips `enable_code_references` to True, whereas line 130 says the default is False. The table also omits `prepare_if_dev` (default True).",
+        "evidence": "dagster_dbt/components/dbt_project/component.py: `translation_settings: DagsterDbtComponentTranslatorSettings | None` with example `{'enable_source_tests_as_checks': True}`; `prepare_if_dev: bool = True`. dbt_component_utils.py: `class DagsterDbtComponentTranslatorSettings(DagsterDbtTranslatorSettings): enable_code_references: bool = True`. The component also passes `allow_arbitrary_check_specs=...enable_source_tests_as_checks`.",
+        "fix": "Add `translation_settings` and `prepare_if_dev` rows. Show `translation_settings: {enable_source_tests_as_checks: true}` in the tests section, and note the component's code-references default is True.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-dbt-and-elt.md",
+        "line": 134,
+        "kind": "misleading",
+        "claim": "'asset key is `<schema>/<model_name>` for models, seeds, and snapshots (bare name when no schema)'. The schema segment appears only when the model itself configures `schema` (custom schema). It is not the warehouse schema, and most models get a bare name key. An agent reading `<schema>/<model_name>` may write `AssetKey(['main','customers'])` or `['public','customers']` for deps; the file's own examples (`customers`, `raw_customers`) use bare keys.",
+        "evidence": "asset_utils.py `default_asset_key_fn`: sources `[source_name, name]`; versioned models `[alias]`; otherwise `[config.schema, name]` only if `config.schema is not None`, else `[name]`. Docstring: 'the union of its model name and any schema configured on the model itself'.",
+        "fix": "Say 'bare `name` unless the model sets `config.schema`, then `[schema, name]`; sources are `[source_name, table]`'.",
+        "verified": true
+      },
+      {
+        "file": "references/integrations-dbt-and-elt.md",
+        "line": 84,
+        "kind": "internal-conflict",
+        "claim": "The subclass example reads `context.op_config.get('full_refresh')` on an `AssetExecutionContext`. api-quick-reference.md line 431 lists `op_config` on AssetExecutionContext as deprecated. In 1.13.28 it warns and points to `context.op_execution_context.op_config`. The upstream dbt docs use the same deprecated accessor, so the skill is faithful to the docs but the two reference files disagree.",
+        "evidence": "`dagster._annotations.get_deprecated_info(dg.AssetExecutionContext.op_config)` returns a deprecation whose text is 'Use context.op_execution_context.op_config instead.' `hasattr(dg.AssetExecutionContext, 'op_execution_context')` is True. dagster_docs.py page integrations/libraries/dbt line 848 shows `context.op_config.get(\"full_refresh\", False)`.",
+        "fix": "Use `context.op_execution_context.op_config.get('full_refresh')` in the example, and reconcile the legacy row in api-quick-reference.md.",
+        "verified": true
+      }
+    ],
+    "probes": [
+      {
+        "question": "In a Dagster 1.13 asset job, a non-blocking asset check on asset `a` returns `AssetCheckResult(passed=False, severity=AssetCheckSeverity.ERROR)`. Does the run fail, and does a downstream asset `b` (deps on `a`) still materialize? What would change if the check were declared `blocking=True`?",
+        "answer": "The run succeeds and `b` materializes. A failed ERROR-severity check that is not blocking is only recorded as a failed evaluation. With `blocking=True` and ERROR severity, the check step raises DagsterAssetCheckFailedError, the run fails and downstream assets are skipped. Verified with `dg.materialize`.",
+        "wrong_answer_trap": "ERROR severity fails the run, and WARN is the non-failing level, so `b` would not run in either case.",
+        "source": "references/api-quick-reference.md:90"
+      },
+      {
+        "question": "Using dagster-sling with the default `DagsterSlingTranslator` (target_prefix \"target\") and a replication stream `public.accounts`, what asset key does the generated asset get and what is its upstream dep key? How would you reference that asset from a downstream `@dg.asset`?",
+        "answer": "The key is a multi-segment path ['target','public','accounts'] (displayed `target/public/accounts`). The dep is ['public','accounts']. Reference it with `deps=[dg.AssetKey(['target','public','accounts'])]` or by overriding via `meta.dagster.asset_key` in replication.yaml. Derived from `_default_asset_key_fn` and `clean_name_lower_with_dots`. (If the stream sets `object:`, the key uses the object path.)",
+        "wrong_answer_trap": "A single flat key `target_public_accounts` depending on `public_accounts`, which is the wrong claim in the translator docstring and the skill.",
+        "source": "references/integrations-dbt-and-elt.md:359"
+      },
+      {
+        "question": "In a `DbtProjectComponent` defs.yaml, how do you make dbt source tests load as Dagster asset checks, since the Python `DagsterDbtTranslatorSettings` object is not available in YAML? Does the component enable code references by default?",
+        "answer": "Set `attributes.translation_settings: {enable_source_tests_as_checks: true}`. The component's settings class `DagsterDbtComponentTranslatorSettings` defaults `enable_code_references` to True, unlike the Python `DagsterDbtTranslatorSettings` (False). Verified in dagster-dbt 0.29.28 source.",
+        "wrong_answer_trap": "It cannot be set from YAML (use `@dbt_assets` with `DagsterDbtTranslatorSettings`), or a made-up key such as `enable_source_tests_as_checks` under `translation`.",
+        "source": "references/integrations-dbt-and-elt.md:130 and :148-155"
+      },
+      {
+        "question": "You want Power BI semantic models to be refreshable and materializable from Dagster, and you are using dagster-powerbi's Component in defs.yaml. How do you enable that without writing Python wrappers?",
+        "answer": "Set `enable_semantic_model_refresh` on `PowerBIWorkspaceComponent`: `true` for all semantic models, or a list of model names. Equivalent switches: `TableauComponent.enable_embedded_datasource_refresh` / `enable_published_datasource_refresh`, `LookerComponent.pdt_builds`. Verified in the 0.29.28 wheel source.",
+        "wrong_answer_trap": "BI assets from `load_powerbi_asset_specs` or the Component are always observable-only; you must call `build_semantic_model_refresh_asset_definition` in Python.",
+        "source": "references/integrations-catalog.md:450-452 and :319-323"
+      },
+      {
+        "question": "What does `DbtCliResource` use as its dbt executable by default in dagster-dbt 0.29.28 (Dagster 1.13.28), and what happens to `.fetch_row_counts()` when that executable is the Fusion engine?",
+        "answer": "`dbtf` if it is found on PATH (dbt Fusion), otherwise `dbt`. When the invocation is Fusion, `fetch_row_counts()` logs a warning and returns the events unchanged, so no row_count metadata is attached. Verified in dagster_dbt/core/resource.py and core/dbt_event_iterator.py.",
+        "wrong_answer_trap": "The default is always the string 'dbt', and row counts are fetched on any engine.",
+        "source": "references/integrations-dbt-and-elt.md:112 and :114"
+      },
+      {
+        "question": "A dbt microbatch incremental model is wired to a Dagster daily-partitioned `@dbt_assets`. Which CLI flags should the asset body pass for the partition window, and what happens if you pass `--vars` start_date/end_date instead?",
+        "answer": "Pass `--event-time-start` and `--event-time-end` (taken from `context.partition_time_window`). `--vars` only injects values into the SQL template and does not control batch scheduling, so the model silently processes every batch from `begin` to now. Confirmed on the Dagster docs dbt-patterns page.",
+        "wrong_answer_trap": "Use `--vars` with start_date/end_date like a regular incremental model, since that restricts the window.",
+        "source": "references/integrations-dbt-and-elt.md:206 and :468"
+      },
+      {
+        "question": "With dagster-fivetran, what is the default effect of Dagster triggering a connector sync on the connector's Fivetran schedule, and which two `FivetranWorkspace` settings change the default behaviors around that sync?",
+        "answer": "By default (`disable_schedule_on_trigger=True`) the first Dagster-triggered sync sets the connector's schedule to manual, turning off Fivetran's own scheduling. Setting `disable_schedule_on_trigger=False` keeps both. `retry_on_reschedule` (default True) controls whether a quota-based reschedule raises RetryRequested (False keeps polling in the same step). Both default values confirmed in resources.py.",
+        "wrong_answer_trap": "Dagster just calls the sync API and leaves the Fivetran schedule untouched. Or: the polling sensor is required to avoid duplicate runs.",
+        "source": "references/integrations-dbt-and-elt.md:413"
+      },
+      {
+        "question": "A teammate says `dg.materialize_to_memory` is deprecated in Dagster 1.13 and should be replaced with `dg.materialize(..., resources={'io_manager': InMemoryIOManager()})` in new unit tests. Is that right, and what does `materialize_to_memory` do if you pass it an io_manager resource?",
+        "answer": "No. `materialize_to_memory` is `@public` with no deprecation or supersession annotation in 1.13.28, and it is the standard in-memory test helper. Passing an io_manager for any io manager key raises DagsterInvariantViolationError, because it forces the in-memory manager. Verified by running it with warnings as errors and by reading the source.",
+        "wrong_answer_trap": "Yes, it is deprecated and you should use `materialize` with `InMemoryIOManager` (the api-quick-reference claim).",
+        "source": "references/api-quick-reference.md:274"
+      }
+    ]
+  }
+]
