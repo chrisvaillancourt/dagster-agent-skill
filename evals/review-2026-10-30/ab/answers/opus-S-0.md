@@ -1,0 +1,31 @@
+I ran or read the installed 1.13.28 source for each answer below. Scratch work is in `./scratch/`, and `src/` was not modified.
+
+### Q1
+`dg check yaml --validate-requirements` fails (exit 1) with `requirements.env Component uses environment variables that are not specified in the component file: API_TOKEN`. Plain `dg check yaml` and `dg check defs` both pass silently. The missing variable renders as `None`, so the asset description becomes the literal string `"token=None"`. To fix it, declare the variable in a top-level `requirements: {env: [API_TOKEN]}` block in defs.yaml, set it (for example in `.env`, which `dg list envs` reports), and make the validation part of CI.
+
+### Q5
+Under uv you don't need `uv pip install -e .`, as long as the project has a `[build-system]`. uv uses pyproject.toml as a cache key, so the next `uv sync` or `uv run` reinstalls the package and registers the entry point. I saw it reinstall `~ probe-proj`; before that, dg warned `missing_dg_plugin_module_in_manifest`. Once the entry point exists, `EnvRegistry` ignores `[tool.dg.project].registry_modules` entirely, since it only loads that list when there is no entry point. In my test, `dg list registry-modules` showed `probe_proj.components` and dropped the `probe_proj.components.*` submodules that the list had matched. So the entry-point module (its `__init__.py`) must import or export your component classes.
+
+### Q10
+In a single-run backfill the run covers a partition range, so `context.partition_key` raises `DagsterInvariantViolationError: Cannot access partition_key for a partitioned run with a range of partitions`. If you only fix that, returning the DataFrame fails next: the default `PickledObjectFilesystemIOManager` "does not support persisting an output associated with multiple partitions". The fix is to read `context.partition_keys`, `context.partition_key_range` or `context.partition_time_window`, then process and write the whole range yourself (or use an IO manager that handles ranges, such as the DuckDB/Snowflake ones) and return `dg.MaterializeResult`.
+
+### Q19
+Wrap the call in the tick's time: `with dg.partition_loading_context(effective_dt=context.scheduled_execution_time): key = daily_job.partitions_def.get_last_partition_key()`. Then pass that key to `dg.RunRequest(partition_key=key)`. Don't pass `current_time=` to `get_last_partition_key()`, because in 1.13 it takes no arguments and raises `TypeError`. Also don't rely on wall-clock `datetime.now()`, which is what you get without the context (it returned yesterday's real date in my test). `dg.build_schedule_from_partitioned_job(daily_job)` does all of this for you.
+
+### Q23
+Zero. `eager()` is `in_latest_time_window() & (newly_missing() | any_deps_updated()).since_last_handled() & …`, so it only looks at the latest daily partition. Even that partition is only requested if it becomes missing after the condition is applied or an upstream dependency updates. I confirmed 0 requests with `dg.evaluate_automation_conditions`. For the 30 old partitions, launch a backfill (in the UI, or `dg launch --assets my_asset --partition-range 2025-01-01...2025-01-30`). If you want automation to keep filling gaps, use a custom condition such as `dg.AutomationCondition.missing() & ~dg.AutomationCondition.in_progress()`, which requested all 30. Note that `in_latest_time_window(lookback_delta)` alone still yields 0.
+
+### Q32
+Neither of those names is exported in 1.13.28: there is no `dg.ConfigurableResourceFactory` and no `dg.Resource`. Subclass `ConfigurableResourceFactory[GitHub]` from `dagster._config.pythonic_config` (a private path), add the `token: str` field, and implement `create_resource(self, context) -> GitHub`. In the asset, annotate the parameter as `github: dg.ResourceParam[GitHub]`. Annotating it as the factory class instead raises `DagsterInvalidDefinitionError` and tells you to use `ResourceParam[<output type>]`. The public-API alternative is a `dg.ConfigurableResource` with a `get_client()` method that returns `GitHub(self.token)`.
+
+### Q36
+For `table_schema`, the orchestrator calls `check.mapping_param` on the value. A list therefore raises `ParameterCheckError: Param "table_schema_value" is not one of ['Mapping']`, which is only logged. The run still succeeds, but the materialization has no `schema` metadata. `raw_value` must be a mapping with a `columns` key: `{'columns': [{'name': 'id', 'type': 'int'}]}`. Each column can also carry `description`, `tags` and `constraints`.
+
+### Q44
+With no existing config, `DagsterPlusCliConfig.write()` writes to the dg user config, `~/.config/dg.toml` (or `$XDG_CONFIG_HOME/dg.toml`, or `$DG_CLI_CONFIG`; on Windows `~/AppData/dg/dg.toml`), under `[cli.plus]`. If `~/.dagster_cloud_cli/config` (or `$DAGSTER_CLOUD_CLI_CONFIG`) exists, it takes precedence and receives the writes instead. If both files contain Plus settings, every command that reads the config raises `Found Dagster Plus config in both … Please consolidate your config files.` To fix it, delete or merge one of the two files.
+
+### Q50
+Entry points are only registered when the package itself is installed into the venv. A legacy pyproject.toml usually has no `[build-system]` (or has `tool.uv.package = false`), and then uv treats it as a virtual project: `uv sync` installs only the dependencies, never your package. dg then warns `missing_dg_plugin_module_in_manifest` and lists only `dagster`. To fix it, add a `[build-system]` (for example `requires = ["hatchling"]`, `build-backend = "hatchling.build"`) or set `[tool.uv] package = true`, then run `uv sync`. Make sure the entry-point module imports your components.
+
+### Q55
+By default `DbtCliResource.dbt_executable` is `"dbtf"` if `shutil.which("dbtf")` finds it on PATH when dagster_dbt is imported (the result is cached), and `"dbt"` otherwise. When the invocation is Fusion (`is_fusion`), `.fetch_row_counts()` logs a warning that row counts come through the dbt Core adapter, which Fusion doesn't provide. It then returns the events unchanged, so there is no `dagster/row_count` metadata and no error. `.fetch_column_metadata()` behaves the same way; that warning says to add the `log_column_level_metadata` post-hook macro instead.

@@ -1,0 +1,306 @@
+[
+  {
+    "id": 1,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: validate-requirements fails on undeclared var, check defs passes, description token=None.",
+    "key_doubt": "Key says both pass; check.py:120-140 makes --validate-requirements fail when an {{ env.X }} isn't under requirements.env."
+  },
+  {
+    "id": 2,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: only @definitions assets load, module-level asset silently dropped.",
+    "key_doubt": null
+  },
+  {
+    "id": 3,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: kinds {b}, tags merged; inner post_processing items unvalidated by dg check yaml.",
+    "key_doubt": "Minor: post_processing schema is not bare object; check.py:34-40 sets additionalProperties False (only `assets` allowed), as answers say."
+  },
+  {
+    "id": 4,
+    "X": "partial",
+    "Y": "partial",
+    "Z": "correct",
+    "note": "X,Y fix the default_factory error but omit adding dg.Resolvable; Z has both.",
+    "key_doubt": null
+  },
+  {
+    "id": 5,
+    "X": "partial",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "X says list can simply be removed, missing that only the entry-point module namespace is scanned.",
+    "key_doubt": null
+  },
+  {
+    "id": 6,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: root dg group sets DAGSTER_IS_DEV_CLI for every command.",
+    "key_doubt": null
+  },
+  {
+    "id": 7,
+    "X": "wrong",
+    "Y": "wrong",
+    "Z": "wrong",
+    "note": "All claim it works; positional call raises TypeError (keyword-only func=).",
+    "key_doubt": null
+  },
+  {
+    "id": 9,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: range requires BackfillPolicy.single_run(); otherwise errors, use UI backfill.",
+    "key_doubt": null
+  },
+  {
+    "id": 10,
+    "X": "partial",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "X misses that the default filesystem IO manager fails on multi-partition output; still suggests returning a DataFrame.",
+    "key_doubt": null
+  },
+  {
+    "id": 11,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: 2024-05-19; end_offset=1 gives 05-20.",
+    "key_doubt": null
+  },
+  {
+    "id": 12,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: FileNotFoundError; AssetIn metadata allow_missing_partitions=True.",
+    "key_doubt": null
+  },
+  {
+    "id": 13,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All match key on the three metadata accessors.",
+    "key_doubt": null
+  },
+  {
+    "id": 19,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All use partition_loading_context; X's get_partition_keys(current_time=) alternative verified working.",
+    "key_doubt": null
+  },
+  {
+    "id": 20,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: no; add alerts selector or use monitor_all_code_locations.",
+    "key_doubt": null
+  },
+  {
+    "id": 21,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: on_cron; eager as wrong choice.",
+    "key_doubt": null
+  },
+  {
+    "id": 22,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "partial",
+    "note": "Z wrongly says default_condition can't combine with use_user_code_server; it's only allowed there (verified).",
+    "key_doubt": null
+  },
+  {
+    "id": 23,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All say zero requested and newly_missing must be replaced; verified empirically.",
+    "key_doubt": "Key says eager requests latest and .without/.replace(lookback) fix it; evaluate_automation_conditions gave 0 for eager and both key fixes over 2 ticks; only missing() yields 31."
+  },
+  {
+    "id": 28,
+    "X": "partial",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "X's alternative dg.materialize([down], io_manager) still raises DagsterInvalidDefinitionError (verified).",
+    "key_doubt": null
+  },
+  {
+    "id": 29,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: ERROR blocks downstream and raises; WARN doesn't block.",
+    "key_doubt": null
+  },
+  {
+    "id": 31,
+    "X": "partial",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "X says freshness is off by default; it defaults on (verified). Y,Z right.",
+    "key_doubt": "Key says freshness disabled by default; settings_methods.py:166 defaults enabled=True and a minimal instance reports freshness_enabled True with FRESHNESS_DAEMON required."
+  },
+  {
+    "id": 32,
+    "X": "partial",
+    "Y": "partial",
+    "Z": "partial",
+    "note": "All rely on private ConfigurableResourceFactory import; miss that public dg.ConfigurableResource[GitHub] with create_resource works (verified).",
+    "key_doubt": null
+  },
+  {
+    "id": 33,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: enum by name, union nested under discriminator, unknown keys error.",
+    "key_doubt": null
+  },
+  {
+    "id": 34,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: project-root .env only; shell export ignored.",
+    "key_doubt": null
+  },
+  {
+    "id": 35,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: QueuedRunCoordinator default, 10 concurrent, daemon needed.",
+    "key_doubt": null
+  },
+  {
+    "id": 36,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: mapping check fails silently in reader thread; use {columns: [...]}.",
+    "key_doubt": null
+  },
+  {
+    "id": 37,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: plain Int fields reject {env:}; template at deploy.",
+    "key_doubt": null
+  },
+  {
+    "id": 39,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "partial",
+    "note": "Z claims cancelled runs keep slots by default; interrupted steps free slots (verified). X,Y right.",
+    "key_doubt": "Key says cancelled runs never auto-release; SIGINT-interrupted run freed its db slot (step failure frees claim), only SIGKILL left it held."
+  },
+  {
+    "id": 43,
+    "X": "correct",
+    "Y": "partial",
+    "Z": "correct",
+    "note": "Y passes --project-dir to start, which only accepts --target-path (verified in source).",
+    "key_doubt": null
+  },
+  {
+    "id": 44,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: [cli.plus] in dg.toml; both-files error.",
+    "key_doubt": null
+  },
+  {
+    "id": 45,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: org settings via dg api organization settings, Org Admin.",
+    "key_doubt": null
+  },
+  {
+    "id": 47,
+    "X": "partial",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "X says auto_observe_interval_minutes still works; it's swallowed (attr None, verified).",
+    "key_doubt": "Key says AssetOut(legacy_freshness_policy=) is removed/swallowed; verified it is accepted and stored on the spec, as all answers say."
+  },
+  {
+    "id": 48,
+    "X": "partial",
+    "Y": "partial",
+    "Z": "partial",
+    "note": "All name removed external_asset(s)_from_spec(s) and AssetSpec, but miss bare deps=AssetKey failing (verified).",
+    "key_doubt": null
+  },
+  {
+    "id": 50,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All diagnose missing [build-system] (virtual project) so uv sync never installs the package.",
+    "key_doubt": "Key only says uv sync reinstalls; it gives no cause. uv skips installing a project with no [build-system] (virtual), which answers identify; Z reproduced."
+  },
+  {
+    "id": 52,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: [target,public,accounts] with dep [public,accounts].",
+    "key_doubt": null
+  },
+  {
+    "id": 53,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: translation_settings.enable_source_tests_as_checks; code refs default True.",
+    "key_doubt": null
+  },
+  {
+    "id": 54,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: enable_semantic_model_refresh true or list.",
+    "key_doubt": null
+  },
+  {
+    "id": 55,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: dbtf if on PATH else dbt; Fusion row counts skipped with warning.",
+    "key_doubt": null
+  },
+  {
+    "id": 57,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: schedule set manual; disable_schedule_on_trigger and retry_on_reschedule.",
+    "key_doubt": null
+  }
+]

@@ -1,0 +1,306 @@
+[
+  {
+    "id": 1,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: undeclared var fails --validate-requirements, check defs passes, 'token=None'.",
+    "key_doubt": "Key says both pass; verified --validate-requirements exits 1 when API_TOKEN is undeclared; check defs passes; description token=None; env('X') raises."
+  },
+  {
+    "id": 2,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: only returned Definitions load, no warning.",
+    "key_doubt": null
+  },
+  {
+    "id": 3,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: kinds {b}, tags merged, nested keys unvalidated by check yaml. Z's 'permissive schema' slightly off but harmless.",
+    "key_doubt": "Minor: check yaml does reject unknown keys directly under post_processing (verified); nested keys unvalidated as key says."
+  },
+  {
+    "id": 4,
+    "X": "partial",
+    "Y": "partial",
+    "Z": "correct",
+    "note": "All fix default_factory; only Z adds dg.Resolvable (verified attributes rejected without it).",
+    "key_doubt": null
+  },
+  {
+    "id": 5,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "partial",
+    "note": "X/Y: uv sync suffices, registry_modules ignored. Z gives trap: must run uv pip install -e .",
+    "key_doubt": null
+  },
+  {
+    "id": 6,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: root dg callback sets it for every command; Y adds DEFS_VALIDATION flag.",
+    "key_doubt": null
+  },
+  {
+    "id": 7,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: TypeError, keyword-only func=. None mention PreviewWarning (minor).",
+    "key_doubt": null
+  },
+  {
+    "id": 9,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: rejected unless single_run backfill policy; UI/daemon for per-partition.",
+    "key_doubt": null
+  },
+  {
+    "id": 10,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: partition_key raises, default IO manager can't store range; fixes given.",
+    "key_doubt": null
+  },
+  {
+    "id": 11,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: 2024-05-19, end_offset=1 gives 05-20, hour/minute only tick time.",
+    "key_doubt": null
+  },
+  {
+    "id": 12,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: load fails; AssetIn metadata allow_missing_partitions.",
+    "key_doubt": null
+  },
+  {
+    "id": 13,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All three distinctions correct; output_metadata is {}.",
+    "key_doubt": null
+  },
+  {
+    "id": 19,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: partition_loading_context + no-arg get_last_partition_key.",
+    "key_doubt": null
+  },
+  {
+    "id": 20,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: monitored_jobs replaces own-location default; add alerts selector.",
+    "key_doubt": null
+  },
+  {
+    "id": 21,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: on_cron as barrier; eager is the wrong choice.",
+    "key_doubt": null
+  },
+  {
+    "id": 22,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: AutomationConditionSensorDefinition use_user_code_server=True, 500 limit, beta.",
+    "key_doubt": null
+  },
+  {
+    "id": 23,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: latest partition only; .without/.replace in_latest_time_window. Initial-eval 'handled' nuance checked in source.",
+    "key_doubt": null
+  },
+  {
+    "id": 28,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: io_manager rejected, up must be listed; deps=[up] needs no upstream.",
+    "key_doubt": null
+  },
+  {
+    "id": 29,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: ERROR blocks downstream and raises; WARN does not block.",
+    "key_doubt": null
+  },
+  {
+    "id": 31,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: freshness enabled by default, no sensor, LegacyFreshnessPolicy. Key's dagster.yaml requirement is wrong.",
+    "key_doubt": "Key wrong: freshness_enabled defaults True (settings_methods.py get('enabled', True)); storage-only instance runs FRESHNESS_DAEMON (verified)."
+  },
+  {
+    "id": 32,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: ConfigurableResource + create_resource, ResourceParam[GitHub]; factory names not exported.",
+    "key_doubt": null
+  },
+  {
+    "id": 33,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: enum member name, selector union, unknown keys error unless PermissiveConfig.",
+    "key_doubt": null
+  },
+  {
+    "id": 34,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: project-root .env, shell export ignored. Z's single-project nuance is accurate.",
+    "key_doubt": "Minor: single-project dg dev/check defs don't use the override (executable_path only set for workspace entries, cli/utils.py:318); verified in source."
+  },
+  {
+    "id": 35,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: QueuedRunCoordinator default, 10 concurrent, daemon needed.",
+    "key_doubt": null
+  },
+  {
+    "id": 36,
+    "X": "partial",
+    "Y": "partial",
+    "Z": "partial",
+    "note": "All give rejection and correct {columns: [...]} shape, but none says step still succeeds with metadata silently dropped.",
+    "key_doubt": null
+  },
+  {
+    "id": 37,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: plain int fields reject {env:}. Y's run_queue IntSource claim verified.",
+    "key_doubt": null
+  },
+  {
+    "id": 39,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: no limit means no throttle; monitoring free_slots_after_run_end_seconds for orphaned slots.",
+    "key_doubt": "Key overclaims: interrupted steps yield STEP_FAILURE (execute_plan.py:319) and ActiveExecution.handle_event frees the slot; only orphaned slots need monitoring. Verified in source, not run."
+  },
+  {
+    "id": 43,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: start, build-and-push, finish; bare deploy reruns everything. Flags used are valid.",
+    "key_doubt": null
+  },
+  {
+    "id": 44,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: ~/.config/dg.toml [cli.plus]; both files raise consolidate error.",
+    "key_doubt": null
+  },
+  {
+    "id": 45,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: organization settings, Organization Admin, both limits apply.",
+    "key_doubt": null
+  },
+  {
+    "id": 47,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: freshness_policy=Legacy raises; AssetOut legacy kwarg stored; auto_observe ignored.",
+    "key_doubt": "Key wrong on AssetOut: AssetOut(legacy_freshness_policy=...) is stored and reaches multi_asset specs (verified at runtime)."
+  },
+  {
+    "id": 48,
+    "X": "partial",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "X misses that bare deps=AssetKey fails; Y/Z cover both.",
+    "key_doubt": null
+  },
+  {
+    "id": 50,
+    "X": "correct",
+    "Y": "wrong",
+    "Z": "correct",
+    "note": "X/Z: missing build-system/package=false explains it, then uv sync works. Y gives trap: uv sync alone insufficient.",
+    "key_doubt": null
+  },
+  {
+    "id": 52,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: [target, public, accounts], dep [public, accounts].",
+    "key_doubt": null
+  },
+  {
+    "id": 53,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: translation_settings.enable_source_tests_as_checks; code refs on by default.",
+    "key_doubt": null
+  },
+  {
+    "id": 54,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: enable_semantic_model_refresh true or list of names.",
+    "key_doubt": null
+  },
+  {
+    "id": 55,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: dbtf if on PATH else dbt; Fusion row counts warn and pass through.",
+    "key_doubt": null
+  },
+  {
+    "id": 57,
+    "X": "correct",
+    "Y": "correct",
+    "Z": "correct",
+    "note": "All: schedule set to manual by default; disable_schedule_on_trigger and retry_on_reschedule.",
+    "key_doubt": null
+  }
+]

@@ -4,7 +4,46 @@ A review of the `dagster` skill at `24b8436` against Dagster 1.13.28, released t
 
 ## Verdict
 
-Rebuild the skill as a small **correction layer**. Repairing the current encyclopedia isn't worth it. The references cost a lot, contain dozens of wrong claims, and mostly repeat what both models already know. Rule 1 ("never answer API, CLI or YAML details from memory") then sends the agent to those references even when its own answer is right. The value is in a short list of traps that neither model knows, and in safe, change-scaled verification.
+**The skill isn't worth maintaining** (the A/B result below decides it). On questions picked because the models got them wrong closed-book, an agent that can run code in an installed Dagster project did as well without the skill as with it:
+
+- Opus 5.5 scored about the same in all three arms.
+- Sol did slightly worse with the skill, because one of its stale claims misled it.
+- The skill added 15% to cost on Opus and 39% on Sol.
+
+A one-line pointer to the docs didn't beat tools alone either. What makes agents right is the installed project, not a curated cache.
+
+The rest of this review was written before the A/B test. It still records what's wrong in the current skill, and the "Recommended plan" section is superseded.
+
+## A/B test: tools only, a docs pointer, or the skill
+
+- **Setup:** 38 questions: the 28 that either model got wrong closed-book, plus 10 controls they both got right. Each arm ran in a fresh copy of a Dagster 1.13.28 project, with full tools (shell, web, file edits) and the instruction to check its answers. The arms differed in one thing only:
+  - **T:** nothing extra.
+  - **D:** an `AGENTS.md`/`CLAUDE.md` line pointing to `https://docs.dagster.io/llms.txt`.
+  - **S:** the current skill.
+- **Models:** Opus 5.5 ran through `claude -p` with medium effort and no user config. Sol ran through omp with medium thinking, `--no-skills` in T and D, and the skill discoverable in S.
+- **Grading:** blind. Opus 5.5 graders, at high effort, saw the arms as X/Y/Z in a different order per question, and checked disputed keys against the installed Dagster.
+- **Evidence:** `ab/` (questions, answers, grades, the unblinding map, metrics, and the harness `run-one.sh`).
+
+| Arm | Opus 5.5 correct / partial / wrong | Opus cost, time | Sol correct / partial / wrong | Sol cost, time |
+| --- | --- | --- | --- | --- |
+| T: tools only | 32 / 5 / 1 | $2.69, 544 s | 36 / 2 / 0 | $1.78, 924 s |
+| D: + docs pointer | 30 / 7 / 1 | $3.02, 505 s | 36 / 2 / 0 | $2.32, 810 s |
+| S: + skill | 33 / 4 / 1 | $3.09, 606 s | 34 / 3 / 1 | $2.47, 860 s |
+
+Costs are list-price estimates summed over four batches, one run per arm.
+
+- **Arms disagreed on very few questions:** 9 of 38 for Opus and 4 of 38 for Sol. There was no consistent winner.
+- **The skill's only "wrong" on Sol was the skill's own stale claim.** It said `uv sync` doesn't reinstall after an entry-point change (items 5 and 50).
+- **With tools, both models confirmed by running code** what they had gotten wrong closed-book.
+- **With the pointer, Sol fetched 13–32 docs URLs per batch.** In the tools-only arm it fetched almost none and ran 28–39 commands instead.
+- **The graders found the answer keys wrong on items 1, 23, 31, 39 and 47, and partly on 50.** The models' answers were right there. The keys came from the audit lanes, which suggests that hand-curated "non-obvious facts" go wrong at a rate comparable to the skill's own content.
+
+**What this does not measure:**
+
+- Behavior the skill steers without being asked: the Dagster+ write gate, a safe verification scope, choosing modern patterns in open-ended build tasks. The September build evals on Opus 5 also showed near-zero delta there.
+- Agents with no installed project to probe, as in conceptual questions or a project not yet created.
+
+The sample is small: one run per arm, and 38 questions picked from the skill's own content.
 
 ## Method
 
