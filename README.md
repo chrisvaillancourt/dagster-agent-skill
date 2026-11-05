@@ -33,3 +33,9 @@ Put a few lines in the `AGENTS.md` (or `CLAUDE.md`) of each repository that uses
 - `skills/dagster/`: the skill as last released (`SKILL.md`, 20 reference files, scripts, templates). The review lists its known errors.
 - `evals/`: the original `claude plugin eval` suite and the 2026-10-30 review.
 - `tools/`: maintainer checks (`validate_skill.py`, `check_symbols.py`).
+
+## License and attribution
+
+This repository is licensed under the [Apache License 2.0](LICENSE).
+
+The reference files and some examples in `skills/dagster/` are adapted from the [Dagster documentation](https://docs.dagster.io) and the [`dagster-io/dagster`](https://github.com/dagster-io/dagster) repository, Copyright Dagster Labs, Inc., licensed under the [Apache License 2.0](https://github.com/dagster-io/dagster/blob/master/LICENSE). They have been condensed, reorganized and modified.

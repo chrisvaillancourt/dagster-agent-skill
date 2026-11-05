@@ -8,5 +8,6 @@
   },
   "homepage": "https://github.com/chrisvaillancourt/dagster-agent-skill",
   "repository": "https://github.com/chrisvaillancourt/dagster-agent-skill",
+  "license": "Apache-2.0",
   "keywords": ["dagster", "data-pipelines", "orchestration", "assets", "dg-cli", "components", "dbt", "dagster-plus"]
 }
